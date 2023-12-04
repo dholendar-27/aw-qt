@@ -18,7 +18,6 @@ from PyQt6.QtWidgets import (
 )
 import getpass
 import time
-import win32com.client
 from PyQt6.QtGui import QIcon
 
 import aw_core
@@ -275,7 +274,7 @@ def run(manager: Manager, testing: bool = False) -> Any:
 
 
     if sys.platform == "win32":
-        print(1111111111111111)
+        import win32com.client
         user_switch_timer = QtCore.QTimer()
         user_switch_timer.timeout.connect(periodic_check)
         user_switch_timer.start(10000)
