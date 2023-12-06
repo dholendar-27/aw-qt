@@ -1,40 +1,26 @@
 import os
 import sys
+from pathlib import Path
+from aw_qt.main import main
+import tempfile
 import ctypes
 from aw_qt.main import main
 def show_error_message():
     ctypes.windll.user32.MessageBoxW(0, "Sundial is already running.", "Sundial.exe", 0x10)
 
-def check_lock_file(lock_file_path):
-    if os.path.exists(lock_file_path):
-        show_error_message()
-        return True
-    return False
+tempdir = tempfile.gettempdir()
+lockfile = os.sep.join([tempdir, 'myapp.lock'])
+try:
+    if os.path.isfile(lockfile):
+        os.unlink(lockfile)
+except WindowsError as e: # Should give you smth like 'WindowsError: [Error 32] The process cannot access the file because it is being used by another process..'   
+    ctypes.windll.user32.MessageBoxW(0,
+                                         "Sundial is already running.",
+                                         "Sundial.exe",
+                                         0x10)
+    sys.exit(0)
 
-def manage_lock_file(lock_file_path, create=False):
-    try:
-        if create:
-            with open(lock_file_path, 'w') as lock_file:
-                lock_file.write("")
-        else:
-            os.remove(lock_file_path)
-    except Exception as e:
-        print(e)
-        return False
-    return True
-
-
-
-if sys.platform == "win32":
-    lock_file_path = os.path.join(os.getenv('TEMP'), 'sundial.lock')
-    if check_lock_file(lock_file_path):
-        sys.exit(0)
-    if manage_lock_file(lock_file_path, create=True):
-        try:
-            main()
-        finally:
-            manage_lock_file(lock_file_path)
-elif sys.platform == "darwin":
-        main()
-
-
+with open(lockfile, 'wb') as lockfileobj:
+    # run your app's main here
+    main()
+os.unlink(lockfile)
