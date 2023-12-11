@@ -24,6 +24,10 @@ import aw_core
 
 from .manager import Manager, Module
 
+if sys.platform == "win32":
+    import win32com.client
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -144,7 +148,9 @@ class TrayIcon(QSystemTrayIcon):
             menu.addAction(exitIcon, "Quit ActivityWatch", lambda: exit(self.manager))
         else:
             menu.addAction("Quit ActivityWatch", lambda: exit(self.manager))
-
+        lock_file_path = os.path.join(os.getenv('TEMP'), 'sundial.lock')
+        if os.path.exists(lock_file_path):
+            os.remove(lock_file_path)
         self.setContextMenu(menu)
 
         def show_module_failed_dialog(module: Module) -> None:

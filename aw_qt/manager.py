@@ -12,8 +12,12 @@ import aw_core
 
 logger = logging.getLogger(__name__)
 
-# The path of aw_qt
-_module_dir = os.path.dirname(os.path.realpath(__file__))
+if getattr(sys, 'frozen', False):
+    # Running as a PyInstaller bundle
+    _module_dir = os.path.dirname(sys.executable)
+else:
+    # Running as a script or API
+    _module_dir = os.path.dirname(os.path.realpath(__file__))
 
 # The path of the aw-qt executable (when using PyInstaller)
 _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
@@ -25,6 +29,7 @@ def _log_modules(modules: List["Module"]) -> None:
 
 
 ignored_filenames = ["aw-cli", "aw-client", "aw-qt", "aw-qt.desktop", "aw-qt.spec"]
+auto_start_modules = ["aw-server"]
 
 
 def filter_modules(modules: Iterable["Module"]) -> Set["Module"]:
@@ -51,6 +56,7 @@ def is_executable(path: str, filename: str) -> bool:
 
 def _discover_modules_in_directory(path: str) -> List["Module"]:
     """Look for modules in given directory path and recursively in subdirs matching aw-*"""
+
     modules = []
     matches = glob(os.path.join(path, "aw-*"))
     for path in matches:
@@ -276,14 +282,15 @@ class Manager:
         # Start aw-server-rust first
         if "aw-server-rust" in autostart_modules:
             self.start("aw-server-rust")
-        elif "aw-server" in autostart_modules:
+        elif "aw-server" in autostart_modules and "aw-server" in auto_start_modules:
             self.start("aw-server")
 
         autostart_modules = list(
             set(autostart_modules) - {"aw-server", "aw-server-rust"}
         )
         for name in autostart_modules:
-            self.start(name)
+            if name in auto_start_modules:
+                self.start(name)
 
     def stop(self, module_name: str) -> None:
         for m in self.modules:
@@ -316,6 +323,46 @@ class Manager:
         logger.info(
             f"{module.name:18}  {'running' if module.is_alive() else 'stopped' :10}  {module.type}"
         )
+
+    def status(self):
+        logger.info(_parent_dir)
+        modules_list = []
+        modules = set(_discover_modules_bundled())
+        modules |= set(_discover_modules_system())
+        modules = filter_modules(modules)
+
+        # Serialize module data
+        for m in modules:
+            module_info = {
+                "watcher_name": m.name,  # Replace with the actual attribute or property name
+                "Watcher_status": m.is_alive(),  # Replace with the actual method or property
+                "Watcher_location": str(m)  # Convert module object to a string
+            }
+            modules_list.append(module_info)
+            print(_parent_dir)
+        return modules_list
+
+    def start_modules(self, module_name: str) -> str:
+        # NOTE: Will always prefer a bundled version, if available. This will not affect the
+        #       aw-qt menu since it directly calls the module's start() method.
+        bundled = [m for m in self.modules_bundled if m.name == module_name]
+        system = [m for m in self.modules_system if m.name == module_name]
+        if bundled:
+            bundled[0].start(self.testing)
+            return f"Module {module_name} is started"
+        elif system:
+            system[0].start(self.testing)
+            return f"Module {module_name} is started"
+        else:
+            return f"Manager tried to start nonexistent module {module_name}"
+
+    def stop_modules(self, module_name: str) -> str:
+        for m in self.modules:
+            if m.name == module_name:
+                m.stop()
+                return f"Module {module_name} is stopped"
+        else:
+            return f"Manager tried to stop nonexistent module {module_name}"
 
 
 def main_test():
