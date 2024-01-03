@@ -1,4 +1,6 @@
+import configparser
 import os
+import signal
 import sys
 import logging
 import subprocess
@@ -12,16 +14,12 @@ import aw_core
 
 logger = logging.getLogger(__name__)
 
-if getattr(sys, 'frozen', False):
-    # Running as a PyInstaller bundle
-    _module_dir = os.path.dirname(sys.executable)
-else:
-    # Running as a script or API
-    _module_dir = os.path.dirname(os.path.realpath(__file__))
+# The path of aw_qt
+_module_dir = os.path.dirname(os.path.realpath(__file__))
 
 # The path of the aw-qt executable (when using PyInstaller)
 _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
-
+config_file_path = os.path.join(os.path.dirname(os.path.abspath(os.path.join(_module_dir, os.pardir))),"process.ini")
 
 def _log_modules(modules: List["Module"]) -> None:
     for m in modules:
@@ -37,6 +35,20 @@ def filter_modules(modules: Iterable["Module"]) -> Set["Module"]:
     # Like aw-qt itself, or aw-cli
     return {m for m in modules if m.name not in ignored_filenames}
 
+def initialize_ini_file():
+    """
+    Initialize the INI file with default values if it doesn't exist.
+    """
+    if not os.path.exists(config_file_path):
+        config = configparser.ConfigParser()
+        # Adding sections and default values for each module
+        config['aw-server'] = {'status': 'False', 'pid': ''}
+        config['aw-watcher-afk'] = {'status': 'False', 'pid': ''}
+        config['aw-watcher-window'] = {'status': 'False', 'pid': ''}
+
+        with open(config_file_path, 'w') as configfile:
+            config.write(configfile)
+        logger.info("Initialized new INI file with default values.")
 
 def is_executable(path: str, filename: str) -> bool:
     if not os.path.isfile(path):
@@ -56,7 +68,6 @@ def is_executable(path: str, filename: str) -> bool:
 
 def _discover_modules_in_directory(path: str) -> List["Module"]:
     """Look for modules in given directory path and recursively in subdirs matching aw-*"""
-
     modules = []
     matches = glob(os.path.join(path, "aw-*"))
     for path in matches:
@@ -126,6 +137,32 @@ def _discover_modules_system() -> List["Module"]:
     _log_modules(modules)
     return modules
 
+def read_update_ini_file( modules, key, new_value=None):
+    """
+    Read and optionally update data in an INI file.
+
+    Args:
+        file_path (str): The path to the INI file.
+        section (str): The section in the INI file.
+        key (str): The key within the section.
+        new_value (str, optional): The new value to set for the key (if None, no update is performed).
+
+    Returns:
+        str: The current value of the key in the specified section.
+    """
+    config = configparser.ConfigParser()
+    config.read(config_file_path)
+
+    # Read data from the INI file
+    current_value = config.get(modules, key)
+
+    if new_value is not None:
+        # Update data in the INI file if new_value is provided
+        config.set(modules, key, new_value)
+        with open(config_file_path, 'w') as configfile:
+            config.write(configfile)
+
+    return current_value
 
 class Module:
     def __init__(self, name: str, path: Path, type: str) -> None:
@@ -133,100 +170,76 @@ class Module:
         self.path = path
         assert type in ["system", "bundled"]
         self.type = type
-        self.started = (
-            False  # Should be True if module is supposed to be running, else False
-        )
-        # assert location in ["system", "bundled"]
-        # self.location = "system" if _is_system_module(name) else "bundled"
-        self._process: Optional[subprocess.Popen[str]] = None
-        self._last_process: Optional[subprocess.Popen[str]] = None
-
-    def __hash__(self) -> int:
-        return hash((self.name, self.path))
-
-    def __eq__(self, other: Hashable) -> bool:
-        return hash(self) == hash(other)
-
-    def __repr__(self) -> str:
-        return f"<Module {self.name} at {self.path}>"
-
-    def start(self, testing: bool) -> None:
-        logger.info(f"Starting module {self.name}")
-
-        exec_cmd = [str(self.path)]
-        if testing:
-            exec_cmd.append("--testing")
-        # logger.debug("Running: {}".format(exec_cmd))
-
-        # Don't display a console window on Windows
-        # See: https://github.com/ActivityWatch/activitywatch/issues/212
-        startupinfo = None
-        if sys.platform == "win32" or sys.platform == "cygwin":
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        elif sys.platform == "darwin":
-            logger.info("macOS: Disable dock icon")
-            import AppKit
-
-            AppKit.NSBundle.mainBundle().infoDictionary()["LSBackgroundOnly"] = "1"
-
-        # There is a very good reason stdout and stderr is not PIPE here
-        # See: https://github.com/ActivityWatch/aw-server/issues/27
-        self._process = subprocess.Popen(
-            exec_cmd, universal_newlines=True, startupinfo=startupinfo
-        )
-        self.started = True
-
-    def stop(self) -> None:
-        """
-        Stops a module, and waits until it terminates.
-        """
-        # TODO: What if a module doesn't stop? Add timeout to p.wait() and then do a p.kill() if timeout is hit
-        if not self.started:
-            logger.warning(
-                f"Tried to stop module {self.name}, but it hasn't been started"
-            )
-            return
-        elif not self.is_alive():
-            logger.warning(f"Tried to stop module {self.name}, but it wasn't running")
-        else:
-            if not self._process:
-                logger.error("No reference to process object")
-            logger.debug(f"Stopping module {self.name}")
-            if self._process:
-                self._process.terminate()
-            logger.debug(f"Waiting for module {self.name} to shut down")
-            if self._process:
-                self._process.wait()
-            logger.info(f"Stopped module {self.name}")
-
-        assert not self.is_alive()
-        self._last_process = self._process
-        self._process = None
+        self.config_file_path = config_file_path
         self.started = False
 
-    def toggle(self, testing: bool) -> None:
-        if self.started:
-            self.stop()
+    def _read_pid(self) -> Optional[int]:
+        config = configparser.ConfigParser()
+        config.read(self.config_file_path)
+        try:
+            return int(config.get(self.name, 'pid'))
+        except Exception as e:
+            logger.error(f"Error reading PID for {self.name}: {e}")
+            return None
+
+    def _write_pid(self, pid: int):
+        config = configparser.ConfigParser()
+        config.read(self.config_file_path)
+        if not config.has_section(self.name):
+            config.add_section(self.name)
+        config.set(self.name, 'pid', str(pid))
+        with open(self.config_file_path, 'w') as configfile:
+            config.write(configfile)
+        logger.debug(f"PID for {self.name} written to file: {pid}")
+
+    def _update_status_in_ini(self, status: bool):
+        config = configparser.ConfigParser()
+        config.read(self.config_file_path)
+        if not config.has_section(self.name):
+            config.add_section(self.name)
+        config.set(self.name, 'status', 'True' if status else 'False')
+        with open(self.config_file_path, 'w') as configfile:
+            config.write(configfile)
+
+    def _is_process_running(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except OSError:
+            return False
         else:
-            self.start(testing)
+            return True
+
+    def start(self):
+        pid = self._read_pid()
+        if pid and self._is_process_running(pid):
+            logger.info(f"{self.name} is already running")
+            return
+        
+        self.started = True
+        logger.info(f"Starting {self.name}")
+        self._process = subprocess.Popen([str(self.path)], start_new_session=True)
+        self._write_pid(self._process.pid)
+        self._update_status_in_ini(True)
+
+    def stop(self):
+        pid = self._read_pid()
+        if pid and self._is_process_running(pid):
+            try:
+                os.kill(pid, signal.SIGTERM)
+                logger.info(f"Stopped {self.name}")
+                self.started = False
+                self._update_status_in_ini(False)  # Update status to False when stopped
+                self._write_pid(0)  # Remove the PID from the INI file
+            except OSError as e:
+                logger.error(f"Error stopping {self.name}: {e}")
+        else:
+            logger.info(f"{self.name} is not running or PID is invalid")
 
     def is_alive(self) -> bool:
-        if self._process is None:
+        pid = self._read_pid()
+        if pid is None:
             return False
-
-        self._process.poll()
-        # If returncode is none after p.poll(), module is still running
-        return True if self._process.returncode is None else False
-
-    def read_log(self, testing: bool) -> str:
-        """Useful if you want to retrieve the logs of a module"""
-        log_path = aw_core.log.get_latest_log_file(self.name, testing)
-        if log_path:
-            with open(log_path) as f:
-                return f.read()
-        else:
-            return "No log file found"
+        return self._is_process_running(pid)
 
 
 class Manager:
@@ -264,9 +277,9 @@ class Manager:
         bundled = [m for m in self.modules_bundled if m.name == module_name]
         system = [m for m in self.modules_system if m.name == module_name]
         if bundled:
-            bundled[0].start(self.testing)
+            bundled[0].start()
         elif system:
-            system[0].start(self.testing)
+            system[0].start()
         else:
             logger.error(f"Manager tried to start nonexistent module {module_name}")
 
@@ -286,7 +299,7 @@ class Manager:
             self.start("aw-server")
 
         autostart_modules = list(
-            set(autostart_modules) - {"aw-server", "aw-server-rust"}
+            set(autostart_modules) - {"aw-server"}
         )
         for name in autostart_modules:
             if name in auto_start_modules:
@@ -301,8 +314,19 @@ class Manager:
             logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
     def stop_all(self) -> None:
-        for module in filter(lambda m: m.is_alive(), self.modules):
-            module.stop()
+        server_module_name = "aw-server"
+        server_module = None
+
+        # Find 'aw-server' module and temporarily exclude it from the stop process
+        for module in self.modules:
+            if module.name == server_module_name:
+                server_module = module
+            elif module.is_alive():
+                module.stop()
+
+        # Finally, stop 'aw-server' if it's running
+        if server_module and server_module.is_alive():
+            server_module.stop()
 
     def print_status(self, module_name: Optional[str] = None) -> None:
         header = "name                status      type"
@@ -323,38 +347,20 @@ class Manager:
         logger.info(
             f"{module.name:18}  {'running' if module.is_alive() else 'stopped' :10}  {module.type}"
         )
-
+    
     def status(self):
-        logger.info(_parent_dir)
         modules_list = []
-        modules = set(_discover_modules_bundled())
-        modules |= set(_discover_modules_system())
-        modules = filter_modules(modules)
-
         # Serialize module data
-        for m in modules:
+        for m in self.modules:
             module_info = {
                 "watcher_name": m.name,  # Replace with the actual attribute or property name
                 "Watcher_status": m.is_alive(),  # Replace with the actual method or property
                 "Watcher_location": str(m)  # Convert module object to a string
             }
             modules_list.append(module_info)
-            print(_parent_dir)
+            print(modules_list)
         return modules_list
 
-    def start_modules(self, module_name: str) -> str:
-        # NOTE: Will always prefer a bundled version, if available. This will not affect the
-        #       aw-qt menu since it directly calls the module's start() method.
-        bundled = [m for m in self.modules_bundled if m.name == module_name]
-        system = [m for m in self.modules_system if m.name == module_name]
-        if bundled:
-            bundled[0].start(self.testing)
-            return f"Module {module_name} is started"
-        elif system:
-            system[0].start(self.testing)
-            return f"Module {module_name} is started"
-        else:
-            return f"Manager tried to start nonexistent module {module_name}"
 
     def stop_modules(self, module_name: str) -> str:
         for m in self.modules:
