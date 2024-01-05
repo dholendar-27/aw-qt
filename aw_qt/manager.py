@@ -222,10 +222,21 @@ class Module:
         if pid and self._is_process_running(pid):
             logger.info(f"{self.name} is already running")
             return
-
+        exec_cmd = [str(self.path)]
         self.started = True
         logger.info(f"Starting {self.name}")
-        self._process = subprocess.Popen([str(self.path)], start_new_session=True)
+        startupinfo = None
+        if sys.platform == "win32" or sys.platform == "cygwin":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        elif sys.platform == "darwin":
+            logger.info("macOS: Disable dock icon")
+            import AppKit
+            AppKit.NSBundle.mainBundle().infoDictionary()["LSBackgroundOnly"] = "1"
+
+        self._process = subprocess.Popen(
+            exec_cmd, universal_newlines=True, startupinfo=startupinfo
+        )
         self._write_pid(self._process.pid)
         self._update_status_in_ini(True)
 
