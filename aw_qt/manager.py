@@ -10,6 +10,8 @@ from glob import glob
 from time import sleep
 from typing import Optional, List, Hashable, Set, Iterable
 
+import psutil
+
 import aw_core
 
 logger = logging.getLogger(__name__)
@@ -19,7 +21,8 @@ _module_dir = os.path.dirname(os.path.realpath(__file__))
 
 # The path of the aw-qt executable (when using PyInstaller)
 _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
-config_file_path = os.path.join(os.path.dirname(os.path.abspath(os.path.join(_module_dir, os.pardir))),"process.ini")
+config_file_path = os.path.join(os.path.dirname(os.path.abspath(os.path.join(_module_dir, os.pardir))), "process.ini")
+
 
 def _log_modules(modules: List["Module"]) -> None:
     for m in modules:
@@ -35,6 +38,7 @@ def filter_modules(modules: Iterable["Module"]) -> Set["Module"]:
     # Like aw-qt itself, or aw-cli
     return {m for m in modules if m.name not in ignored_filenames}
 
+
 def initialize_ini_file():
     """
     Initialize the INI file with default values if it doesn't exist.
@@ -42,13 +46,14 @@ def initialize_ini_file():
     if not os.path.exists(config_file_path):
         config = configparser.ConfigParser()
         # Adding sections and default values for each module
-        config['aw-server'] = {'status': 'False', 'pid': ''}
-        config['aw-watcher-afk'] = {'status': 'False', 'pid': ''}
-        config['aw-watcher-window'] = {'status': 'False', 'pid': ''}
+        config['aw-server'] = {'status': 'False', 'pid': 0}
+        config['aw-watcher-afk'] = {'status': 'False', 'pid': 0}
+        config['aw-watcher-window'] = {'status': 'False', 'pid': 0}
 
         with open(config_file_path, 'w') as configfile:
             config.write(configfile)
         logger.info("Initialized new INI file with default values.")
+
 
 def is_executable(path: str, filename: str) -> bool:
     if not os.path.isfile(path):
@@ -137,7 +142,8 @@ def _discover_modules_system() -> List["Module"]:
     _log_modules(modules)
     return modules
 
-def read_update_ini_file( modules, key, new_value=None):
+
+def read_update_ini_file(modules, key, new_value=None):
     """
     Read and optionally update data in an INI file.
 
@@ -164,6 +170,7 @@ def read_update_ini_file( modules, key, new_value=None):
 
     return current_value
 
+
 class Module:
     def __init__(self, name: str, path: Path, type: str) -> None:
         self.name = name
@@ -172,6 +179,7 @@ class Module:
         self.type = type
         self.config_file_path = config_file_path
         self.started = False
+        initialize_ini_file()
 
     def _read_pid(self) -> Optional[int]:
         config = configparser.ConfigParser()
@@ -214,7 +222,7 @@ class Module:
         if pid and self._is_process_running(pid):
             logger.info(f"{self.name} is already running")
             return
-        
+
         self.started = True
         logger.info(f"Starting {self.name}")
         self._process = subprocess.Popen([str(self.path)], start_new_session=True)
@@ -237,9 +245,35 @@ class Module:
 
     def is_alive(self) -> bool:
         pid = self._read_pid()
-        if pid is None:
+        if pid == 0 or pid is None:
             return False
-        return self._is_process_running(pid)
+
+        # Check if a process with this PID exists
+        if not psutil.pid_exists(pid):
+            return False
+
+        # Validate if the process is the correct one
+        try:
+            proc = psutil.Process(pid)
+            # You can add more checks here if needed, like comparing process names
+            return proc.is_running()
+        except psutil.NoSuchProcess:
+            return False
+
+    def toggle(self, testing: bool) -> None:
+        if self.started:
+            self.stop()
+        else:
+            self.start()
+
+    def read_log(self, testing: bool) -> str:
+        """Useful if you want to retrieve the logs of a module"""
+        log_path = aw_core.log.get_latest_log_file(self.name, testing)
+        if log_path:
+            with open(log_path) as f:
+                return f.read()
+        else:
+            return "No log file found"
 
 
 class Manager:
@@ -347,7 +381,7 @@ class Manager:
         logger.info(
             f"{module.name:18}  {'running' if module.is_alive() else 'stopped' :10}  {module.type}"
         )
-    
+
     def status(self):
         modules_list = []
         # Serialize module data
@@ -358,9 +392,7 @@ class Manager:
                 "Watcher_location": str(m)  # Convert module object to a string
             }
             modules_list.append(module_info)
-            print(modules_list)
         return modules_list
-
 
     def stop_modules(self, module_name: str) -> str:
         for m in self.modules:

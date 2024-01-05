@@ -107,7 +107,7 @@ class TrayIcon(QSystemTrayIcon):
         self.manager = manager
         self.testing = testing
 
-        self.root_url = f"http://localhost:{5666 if self.testing else 5600}"
+        self.root_url = f"http://localhost:{5666 if self.testing else 7600}"
         self.activated.connect(self.on_activated)
 
         self._build_rootmenu()
