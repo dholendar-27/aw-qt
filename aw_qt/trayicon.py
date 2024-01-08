@@ -83,8 +83,6 @@ def check_user_switch(manager: Manager) -> None:
     wmi = win32com.client.GetObject('winmgmts:')
     for session in wmi.InstancesOf('Win32_ComputerSystem'):
         if session.UserName is not None:
-            logging_msg = f"Detected user: {session.UserName}, Current user: {getpass.getuser()}"
-            logger.info(logging_msg)
             time.sleep(3)
             username = session.UserName.split('\\')[-1]
             if username != getpass.getuser():

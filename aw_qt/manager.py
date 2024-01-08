@@ -9,7 +9,7 @@ from pathlib import Path
 from glob import glob
 from time import sleep
 from typing import Optional, List, Hashable, Set, Iterable
-
+from aw_core.dirs import get_data_dir
 import psutil
 
 import aw_core
@@ -17,11 +17,18 @@ import aw_core
 logger = logging.getLogger(__name__)
 
 # The path of aw_qt
-_module_dir = os.path.dirname(os.path.realpath(__file__))
+if getattr(sys, 'frozen', False):
+    # Running as a PyInstaller bundle
+    _module_dir = os.path.dirname(sys.executable)
+else:
+    # Running as a script or API
+    _module_dir = os.path.dirname(os.path.realpath(__file__))
 
 # The path of the aw-qt executable (when using PyInstaller)
 _parent_dir = os.path.abspath(os.path.join(_module_dir, os.pardir))
-config_file_path = os.path.join(os.path.dirname(os.path.abspath(os.path.join(_module_dir, os.pardir))), "process.ini")
+
+file_path = get_data_dir("aw-server")
+config_file_path = os.path.join(file_path, "process.ini")
 
 
 def _log_modules(modules: List["Module"]) -> None:
@@ -210,12 +217,14 @@ class Module:
             config.write(configfile)
 
     def _is_process_running(self, pid: int) -> bool:
-        try:
-            os.kill(pid, 0)
-        except OSError:
+        if pid is None or pid <= 0:
             return False
-        else:
-            return True
+
+        try:
+            process = psutil.Process(pid)
+            return process.is_running()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            return False
 
     def start(self):
         pid = self._read_pid()
@@ -244,12 +253,13 @@ class Module:
         pid = self._read_pid()
         if pid and self._is_process_running(pid):
             try:
-                os.kill(pid, signal.SIGTERM)
+                process = psutil.Process(pid)
+                process.terminate()  # or process.kill() if terminate does not work
                 logger.info(f"Stopped {self.name}")
                 self.started = False
                 self._update_status_in_ini(False)  # Update status to False when stopped
                 self._write_pid(0)  # Remove the PID from the INI file
-            except OSError as e:
+            except psutil.Error as e:
                 logger.error(f"Error stopping {self.name}: {e}")
         else:
             logger.info(f"{self.name} is not running or PID is invalid")

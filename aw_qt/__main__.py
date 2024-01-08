@@ -1,7 +1,5 @@
 import os
 import sys
-from pathlib import Path
-from aw_qt.main import main
 import tempfile
 import ctypes
 from aw_qt.main import main
