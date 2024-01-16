@@ -169,7 +169,6 @@ class TrayIcon(QSystemTrayIcon):
         # openWebUIIcon = QIcon.fromTheme("open")
         # This method is called when the user clicks on the testing menu.
         menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
-        menu.addAction("Open API Browser", lambda: open_apibrowser(self.root_url))
 
         menu.addSeparator()
 
@@ -189,9 +188,9 @@ class TrayIcon(QSystemTrayIcon):
         # Seems to be in agreement with: https://github.com/OtterBrowser/otter-browser/issues/1313
         #   "it seems that the bug is also triggered when creating a QIcon with an invalid path"
         if exitIcon.availableSizes():
-            menu.addAction(exitIcon, "Quit ActivityWatch", lambda: exit(self.manager))
+            menu.addAction(exitIcon, "Quit Sundial", lambda: exit(self.manager))
         else:
-            menu.addAction("Quit ActivityWatch", lambda: exit(self.manager))
+            menu.addAction("Quit Sundial", lambda: exit(self.manager))
         self.setContextMenu(menu)
 # Add an action to quit the menu
 
