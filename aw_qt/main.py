@@ -45,7 +45,19 @@ def main(
     no_gui: bool,
     interactive_cli: bool,
 ) -> None:
+    """
+     The main function of the application. This is called by the : py : func : ` ~app. main ` function to start the application
+     
+     @param testing - If True tests will be run in a testing environment
+     @param verbose - If True the output will be written to stdout
+     @param autostart_modules - A list of modules to autostart
+     @param no_gui - Don't display GUI to the user
+     @param interactive_cli - If True interactive CLI will be used
+     
+     @return The exit code of the application or None if there was an error in the execution of the application ( in which case it will be 0
+    """
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
+    # This function is called by the aw qt daemon when the OS is Darwin.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt started'", shell=True)
 
@@ -53,11 +65,13 @@ def main(
     logger.info("Started aw-qt...")
 
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
+    # Logs the logging to the system.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'aw-qt successfully started logging'", shell=True)
 
     # Create a process group, become its leader
     # TODO: This shouldn't go here
+    # This is a wrapper around os. setpgrp.
     if sys.platform != "win32":
         # Running setpgrp when the python process is a session leader fails,
         # such as in a systemd service. See:
@@ -77,6 +91,7 @@ def main(
     manager = Manager(testing=testing)
     manager.autostart(_autostart_modules)
 
+    # Run trayicon if no_gui is set to true and interactive_cli is set to true.
     if not no_gui and not interactive_cli:
         from . import trayicon  # pylint: disable=import-outside-toplevel
 
@@ -88,6 +103,7 @@ def main(
         error_code = 0
     else:
         # wait for signal to quit
+        # Sleeps for the current thread to sleep for a certain amount of time.
         if sys.platform == "win32":
             # Windows doesn't support signals, so we just sleep until interrupted
             try:
@@ -104,24 +120,35 @@ def main(
 
 
 def _interactive_cli(manager: Manager) -> None:
+    """
+     Interactive CLI for this module. This is a helper function to interactively call the manager's start () and stop () methods with the manager passed as an argument
+     
+     @param manager - The manager to use for
+    """
+    # input q and print the command line input
     while True:
         answer = input("> ")
+        # if answer is q or q
         if answer == "q":
             break
 
         tokens = answer.split(" ")
         t = tokens[0]
+        # This function is called by the manager.
         if t == "start":
+            # Start the module if the first token is a token.
             if len(tokens) == 2:
                 manager.start(tokens[1])
             else:
                 print("Usage: start <module>")
         elif t == "stop":
+            # Stop the module if the first token is a token.
             if len(tokens) == 2:
                 manager.stop(tokens[1])
             else:
                 print("Usage: stop <module>")
         elif t in ["s", "status"]:
+            # Prints the status of the tokens.
             if len(tokens) == 1:
                 manager.print_status()
             elif len(tokens) == 2:

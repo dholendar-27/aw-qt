@@ -15,8 +15,9 @@ autostart_modules = ["aw-server", "aw-watcher-afk", "aw-watcher-window"]
 class AwQtSettings:
     def __init__(self, testing: bool):
         """
-        An instance of loaded settings, containing a list of modules to autostart.
-        Constructor takes a `testing` boolean as an argument
+         Initialize the autostart module. This is called by __init__ and should not be called directly
+         
+         @param testing - Whether or not we are
         """
         config = load_config_toml("aw-qt", default_config)
         config_section: Any = config["aw-qt" if not testing else "aw-qt-testing"]
