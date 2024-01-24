@@ -168,19 +168,8 @@ class TrayIcon(QSystemTrayIcon):
 
         # openWebUIIcon = QIcon.fromTheme("open")
         # This method is called when the user clicks on the testing menu.
-        menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
-
+        menu.addAction("Open Sundial", lambda: open_webui(self.root_url))
         menu.addSeparator()
-
-        modulesMenu = menu.addMenu("Modules")
-        self._build_modulemenu(modulesMenu)
-
-        menu.addSeparator()
-        menu.addAction(
-            "Open log folder", lambda: open_dir(aw_core.dirs.get_log_dir(None))
-        )
-        menu.addSeparator()
-
         exitIcon = QIcon.fromTheme(
             "application-exit", QIcon("media/application_exit.png")
         )
@@ -212,23 +201,23 @@ class TrayIcon(QSystemTrayIcon):
 
             box.show()
 
-        def rebuild_modules_menu() -> None:
-            for action in modulesMenu.actions():
-                if action.isEnabled():
-                    module: Module = action.data()
-                    alive = module.is_alive()
-                    action.setChecked(alive)
-                    """
-                     Rebuilds the modules menu and checks the status of each module every 2000 ms. This is a workaround for bug #4096
-                    """
-                    # This function is called by the modules menu.
-                    # print(module.text(), alive)
-# Check if the action is alive.
-
-            # TODO: Do it in a better way, singleShot isn't pretty...
-            QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
-
-        QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+#         def rebuild_modules_menu() -> None:
+#             for action in modulesMenu.actions():
+#                 if action.isEnabled():
+#                     module: Module = action.data()
+#                     alive = module.is_alive()
+#                     action.setChecked(alive)
+#                     """
+#                      Rebuilds the modules menu and checks the status of each module every 2000 ms. This is a workaround for bug #4096
+#                     """
+#                     # This function is called by the modules menu.
+#                     # print(module.text(), alive)
+# # Check if the action is alive.
+#
+#             # TODO: Do it in a better way, singleShot isn't pretty...
+#             QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+#
+#         QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
         def check_module_status() -> None:
             unexpected_exits = self.manager.get_unexpected_stops()
@@ -246,7 +235,7 @@ class TrayIcon(QSystemTrayIcon):
             # If any module has been unexpected.
             # TODO: Do it in a better way, singleShot isn't pretty...
             # This function will show the module failed dialog.
-            QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
+            # QtCore.QTimer.singleShot(2000, rebuild_modules_menu)
 
         QtCore.QTimer.singleShot(2000, check_module_status)
 
