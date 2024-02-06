@@ -348,7 +348,7 @@ def run(manager: Manager, testing: bool = False) -> Any:
         sys.exit(1)
 
     if sys.platform == "darwin":
-        icon = QIcon("icons:logo.png")
+        icon = QIcon("icons:Sundial-Logo-Mac.ico")
         # Allow macOS to use filters for changing the icon's color
         icon.setIsMask(True)
     else:
