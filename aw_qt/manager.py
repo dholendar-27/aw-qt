@@ -635,6 +635,27 @@ class Manager:
             modules_list.append(module_info)
         return modules_list
 
+    def module_status(self, module_name: Optional[str] = None) -> dict:
+        """
+         Print status of modules. If module_name is specified print status of module with that name
+
+         @param module_name - name of module to print status of
+
+         @return None if nothing was printed otherwise returns the number of
+        """
+        status = {}
+        # Prints the status of all modules in the module list
+        if module_name:
+            # find module
+            module = next((m for m in self.modules if m.name == module_name), None)
+            # Print the module status.
+            if module:
+                status['module_name'] = module.name
+                status['is_alive'] = module.is_alive()
+                return status
+            else:
+                logger.error(f"Module {module_name} not found")
+
     def stop_modules(self, module_name: str) -> str:
         """
          Stop a module by name. This is a no - op if the module doesn't exist
