@@ -168,7 +168,7 @@ class TrayIcon(QSystemTrayIcon):
 
         # openWebUIIcon = QIcon.fromTheme("open")
         # This method is called when the user clicks on the testing menu.
-        menu.addAction("Open Sundial", lambda: open_webui(self.root_url))
+        menu.addAction("Open TTim", lambda: open_webui(self.root_url))
         menu.addSeparator()
         exitIcon = QIcon.fromTheme(
             "application-exit", QIcon("media/application_exit.png")
@@ -177,9 +177,9 @@ class TrayIcon(QSystemTrayIcon):
         # Seems to be in agreement with: https://github.com/OtterBrowser/otter-browser/issues/1313
         #   "it seems that the bug is also triggered when creating a QIcon with an invalid path"
         if exitIcon.availableSizes():
-            menu.addAction(exitIcon, "Quit Sundial", lambda: exit(self.manager))
+            menu.addAction(exitIcon, "Quit TTim", lambda: exit(self.manager))
         else:
-            menu.addAction("Quit Sundial", lambda: exit(self.manager))
+            menu.addAction("Quit TTim", lambda: exit(self.manager))
         self.setContextMenu(menu)
 # Add an action to quit the menu
 
@@ -348,7 +348,7 @@ def run(manager: Manager, testing: bool = False) -> Any:
         sys.exit(1)
 
     if sys.platform == "darwin":
-        icon = QIcon("icons:Sundial-Logo-Mac.ico")
+        icon = QIcon("icons:logo.ico")
         # Allow macOS to use filters for changing the icon's color
         icon.setIsMask(True)
     else:
