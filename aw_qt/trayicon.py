@@ -144,7 +144,7 @@ class TrayIcon(QSystemTrayIcon):
         QSystemTrayIcon.__init__(self, icon, parent)
         # QSystemTrayIcon also tries to save parent info but it screws up the type info
         self._parent = parent
-        self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
+        self.setToolTip("TTim" + (" (testing)" if testing else ""))
 
         self.manager = manager
         self.testing = testing
