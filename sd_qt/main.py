@@ -11,8 +11,9 @@ from time import sleep
 import click
 from sd_core.log import setup_logging
 
-from .manager import Manager
+from .manager import Manager,Module
 from .config import AwQtSettings
+from .sd_onboard_screens import main_method
 
 logger = logging.getLogger(__name__)
 
@@ -46,15 +47,15 @@ def main(
     interactive_cli: bool,
 ) -> None:
     """
-     The main function of the application. This is called by the : py : func : ` ~app. main ` function to start the application
-     
-     @param testing - If True tests will be run in a testing environment
-     @param verbose - If True the output will be written to stdout
-     @param autostart_modules - A list of modules to autostart
-     @param no_gui - Don't display GUI to the user
-     @param interactive_cli - If True interactive CLI will be used
-     
-     @return The exit code of the application or None if there was an error in the execution of the application ( in which case it will be 0
+    The main function of the application. This is called by the :py:func:`~app.main` function to start the application
+
+    @param testing - If True tests will be run in a testing environment
+    @param verbose - If True the output will be written to stdout
+    @param autostart_modules - A list of modules to autostart
+    @param no_gui - Don't display GUI to the user
+    @param interactive_cli - If True interactive CLI will be used
+
+    @return The exit code of the application or None if there was an error in the execution of the application (in which case it will be 0)
     """
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     # This function is called by the sd qt daemon when the OS is Darwin.
@@ -64,6 +65,7 @@ def main(
     setup_logging("sd-qt", testing=testing, verbose=verbose, log_file=True)
     logger.info("Started sd-qt...")
 
+
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     # Logs the logging to the system.
     if platform.system() == "Darwin":
@@ -71,7 +73,7 @@ def main(
 
     # Create a process group, become its leader
     # TODO: This shouldn't go here
-    # This is a wrapper around os. setpgrp.
+    # This is a wrapper around os.setpgrp.
     if sys.platform != "win32":
         # Running setpgrp when the python process is a session leader fails,
         # such as in a systemd service. See:
@@ -80,6 +82,26 @@ def main(
             os.setpgrp()
         except PermissionError:
             pass
+
+    home_dir = os.path.expanduser("~")
+    install_flag_file = os.path.join(home_dir, "sd-qt", "sd_qt", "flag.txt")
+    logger.info(f"Install flag file path: {install_flag_file}")
+
+    if not os.path.exists(install_flag_file):
+        try:
+            # This is the first run
+            logger.info("Onboarding pages initiated")
+            main_method()
+            # Create the flag file to indicate that the application has been installed
+            os.makedirs(os.path.dirname(install_flag_file), exist_ok=True)
+            logger.info("Onboarding pages implemented successfully...")
+            with open(install_flag_file, 'w') as f:
+                logger.info("Installed......")
+                f.write("Installed")
+        except Exception as e:
+            logger.error(f"An error occurred: {e}")
+    else:
+        logger.info("Application has already been installed")
 
     config = AwQtSettings(testing=testing)
     _autostart_modules = (

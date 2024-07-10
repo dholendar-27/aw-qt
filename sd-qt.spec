@@ -27,7 +27,15 @@ block_cipher = None
 a = Analysis(['sd_qt/__main__.py'],
              pathex=[] + extra_pathex,
              binaries=None,
-             datas=[('resources/sd-qt.desktop', '.'), ('media', 'media')],
+             datas=[
+                ('resources/sd-qt.desktop', '.'),
+                ('media', 'media'),
+                ('sd_qt/static/Background_Image.svg', 'sd_qt/static'),
+                ('sd_qt/static/Group_30501.png', 'sd_qt/static'),
+                ('sd_qt/static/Group_30513.png', 'sd_qt/static'),
+                ('sd_qt/static/Sundial.svg', 'sd_qt/static'),
+            ],
+
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
