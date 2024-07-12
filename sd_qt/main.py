@@ -10,13 +10,23 @@ from time import sleep
 
 import click
 from sd_core.log import setup_logging
+from PyQt6 import QtCore
+from PyQt6.QtWidgets import (
+    QApplication,
+    QSystemTrayIcon,
+    QMessageBox,
+    QMenu,
+    QWidget,
+    QPushButton,
+)
+from PyQt6.QtGui import QIcon
+from pathlib import Path
 
-from .manager import Manager,Module
+from .manager import Manager
 from .config import AwQtSettings
-from .sd_onboard_screens import main_method
+from .sd_onboard_screens import main_method, user_cancelled
 
 logger = logging.getLogger(__name__)
-
 
 @click.command("sd-qt", help="A trayicon and service manager for ActivityWatch")
 @click.option(
@@ -59,49 +69,46 @@ def main(
     """
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
     # This function is called by the sd qt daemon when the OS is Darwin.
-    if platform.system() == "Darwin":
-        subprocess.call("syslog -s 'sd-qt started'", shell=True)
-
+    
     setup_logging("sd-qt", testing=testing, verbose=verbose, log_file=True)
     logger.info("Started sd-qt...")
 
+    if sys.platform == "win32":
+            app_dir = os.path.expanduser("~")
+            install_flag_file = os.path.join(app_dir, "AppData", "Local", "Sundial", "Sundial", "sd-qt", "flag.txt")
+
+    # Check if the flag file exists and its content
+    if not os.path.exists(install_flag_file):
+        try:
+        # pylint: disable=import-outside-toplevel
+            main_return_code = main_method()
+            if main_return_code == 0:
+                logger.error("User cancelled the operation in GUI.")
+                return 1  # Exit main() with error code if GUI operation was cancelled
+            # Ensure global flag is accessed correctly
+            # Create the flag file to indicate that the application has been installed
+            os.makedirs(os.path.dirname(install_flag_file), exist_ok=True)
+            with open(install_flag_file, 'w') as f:
+                f.write("1")
+        except Exception as e:
+            logger.error(f"An error occurred: {e}")
+        return 0
+    else:
+        logger.info("Application has already been installed and continue ....")
+    if platform.system() == "Darwin":
+        subprocess.call("syslog -s 'sd-qt started'", shell=True)
 
     # Since the .app can crash when started from Finder for unknown reasons, we send a syslog message here to make debugging easier.
-    # Logs the logging to the system.
     if platform.system() == "Darwin":
         subprocess.call("syslog -s 'sd-qt successfully started logging'", shell=True)
 
     # Create a process group, become its leader
     # TODO: This shouldn't go here
-    # This is a wrapper around os.setpgrp.
     if sys.platform != "win32":
-        # Running setpgrp when the python process is a session leader fails,
-        # such as in a systemd service. See:
-        # https://stackoverflow.com/a/51005084/1014208
         try:
             os.setpgrp()
         except PermissionError:
             pass
-
-    home_dir = os.path.expanduser("~")
-    install_flag_file = os.path.join(home_dir, "sd-qt", "sd_qt", "flag.txt")
-    logger.info(f"Install flag file path: {install_flag_file}")
-
-    if not os.path.exists(install_flag_file):
-        try:
-            # This is the first run
-            logger.info("Onboarding pages initiated")
-            main_method()
-            # Create the flag file to indicate that the application has been installed
-            os.makedirs(os.path.dirname(install_flag_file), exist_ok=True)
-            logger.info("Onboarding pages implemented successfully...")
-            with open(install_flag_file, 'w') as f:
-                logger.info("Installed......")
-                f.write("Installed")
-        except Exception as e:
-            logger.error(f"An error occurred: {e}")
-    else:
-        logger.info("Application has already been installed")
 
     config = AwQtSettings(testing=testing)
     _autostart_modules = (
@@ -109,25 +116,18 @@ def main(
         if autostart_modules
         else config.autostart_modules
     )
-
     manager = Manager(testing=testing)
     manager.autostart(_autostart_modules)
 
     # Run trayicon if no_gui is set to true and interactive_cli is set to true.
     if not no_gui and not interactive_cli:
         from . import trayicon  # pylint: disable=import-outside-toplevel
-
-        # run the trayicon, wait for signal to quit
         error_code = trayicon.run(manager, testing=testing)
     elif interactive_cli:
-        # just an experiment, don't really see the use right now
         _interactive_cli(manager)
         error_code = 0
     else:
-        # wait for signal to quit
-        # Sleeps for the current thread to sleep for a certain amount of time.
         if sys.platform == "win32":
-            # Windows doesn't support signals, so we just sleep until interrupted
             try:
                 sleep(threading.TIMEOUT_MAX)
             except KeyboardInterrupt:
@@ -139,7 +139,6 @@ def main(
 
     manager.stop_all()
     sys.exit(error_code)
-
 
 def _interactive_cli(manager: Manager) -> None:
     """
