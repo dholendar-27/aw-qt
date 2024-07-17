@@ -13,13 +13,13 @@ autostart_modules = ["sd-server", "sd-watcher-afk", "sd-watcher-window"]
 
 
 class AwQtSettings:
-    def __init__(self, testing: bool):
+    def __init__(self):
         """
          Initialize the autostart module. This is called by __init__ and should not be called directly
          
          @param testing - Whether or not we are
         """
         config = load_config_toml("sd-qt", default_config)
-        config_section: Any = config["sd-qt" if not testing else "sd-qt-testing"]
+        config_section: Any = config["sd-qt"]
 
         self.autostart_modules: List[str] = config_section["autostart_modules"]

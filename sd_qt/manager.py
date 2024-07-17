@@ -9,6 +9,8 @@ from pathlib import Path
 from glob import glob
 from time import sleep
 from typing import Optional, List, Hashable, Set, Iterable
+
+from sd_core import db_cache
 from sd_core.dirs import get_data_dir
 import psutil
 
@@ -46,7 +48,7 @@ def _log_modules(modules: List["Module"]) -> None:
 
 ignored_filenames = ["sd-cli", "sd-client", "sd-qt", "sd-qt.desktop", "sd-qt.spec"]
 auto_start_modules = ["sd-server"]
-
+settings_cache_key = "settings_cache"
 
 def filter_modules(modules: Iterable["Module"]) -> Set["Module"]:
     """
@@ -361,6 +363,7 @@ class Module:
          Stop the process if it is running and update status in INI file to
         """
         pid = self._read_pid()
+        print(pid)
         # Stop the process and update the status to False
         if pid and self._is_process_running(pid):
             try:
@@ -509,7 +512,7 @@ class Manager:
     def autostart(self, autostart_modules: List[str]) -> None:
         """
          Autostart modules in a way that works in both bundled and non - bundled
-         
+
          @param autostart_modules - list of modules to autost
         """
         # NOTE: Currently impossible to autostart a system module if a bundled module with the same name exists
@@ -520,23 +523,8 @@ class Manager:
             # Check if module is in the list of modules
             if name not in [m.name for m in self.modules]:
                 logger.error(f"Module {name} not found")
-        autostart_modules = list(set(autostart_modules))
-
-        # Start sd-server-rust first
-        # Start the autostart modules if they are available.
-        if "sd-server-rust" in autostart_modules:
-            self.start("sd-server-rust")
-        elif "sd-server" in autostart_modules and "sd-server" in auto_start_modules:
-            self.start("sd-server")
-
-        autostart_modules = list(
-            set(autostart_modules) - {"sd-server"}
-        )
-        # Start all modules that are auto started.
         for name in autostart_modules:
-            # Start the module if it is not already started.
-            if name in auto_start_modules:
-                self.start(name)
+            self.start(name)
 
     def stop(self, module_name: str) -> None:
         """
