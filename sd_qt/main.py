@@ -54,7 +54,7 @@ def main() -> None:
         start_ui()
         manager.autostart(["sd-server"])
         sleep(10)
-        stop_ui()
+        # stop_ui()
         print(121212112121)
         run_application()
 
