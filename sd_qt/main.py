@@ -9,17 +9,21 @@ import requests
 from time import sleep
 
 from sd_core.log import setup_logging
-from .manager import Manager
+from sd_qt.manager import Manager
 from .config import AwQtSettings
 from .sd_desktop.sundial import run_application
-from .sd_qt.sd_desktop.sundialStartup import AppController
 
 logger = logging.getLogger(__name__)
-app = AppController()
 
 def check_server_status():
     try:
-        response = requests.get("http://localhost:7600/server_status")  # Replace with your actual server health check endpoint
+        $processName = "myprocess.exe"
+$process = Get-Process | Where-Object { $_.ProcessName -eq $processName }
+
+if ($process) {
+    Write-Output "ERROR: Process $processName is running. Please close it before uninstalling."
+    Exit 1
+}  # Replace with your actual server health check endpoint
         if response.status_code == 200:
             return True
         else:
