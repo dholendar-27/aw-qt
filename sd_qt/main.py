@@ -5,28 +5,28 @@ import subprocess
 import platform
 import signal
 import threading
+import requests
 from time import sleep
 
 from sd_core.log import setup_logging
 from .manager import Manager
 from .config import AwQtSettings
 from .sd_desktop.sundial import run_application
-from sd_qt.sd_desktop.sundialStartup import AppController
+from .sd_qt.sd_desktop.sundialStartup import AppController
 
 logger = logging.getLogger(__name__)
 app = AppController()
 
-def start_ui():
+def check_server_status():
     try:
-        app.start_ui()
-    except Exception as e:
-        logger.error(f"Error starting UI: {e}")
-
-def stop_ui():
-    try:
-        app.stop_ui()
-    except Exception as e:
-        logger.error(f"Error stopping UI: {e}")
+        response = requests.get("http://localhost:7600/server_status")  # Replace with your actual server health check endpoint
+        if response.status_code == 200:
+            return True
+        else:
+            return False
+    except requests.RequestException as e:
+        logger.error(f"Error checking server status: {e}")
+        return False
 
 def main() -> None:
     """
@@ -51,11 +51,14 @@ def main() -> None:
         config = AwQtSettings()
 
         manager = Manager()
-        start_ui()
+        
         manager.autostart(["sd-server"])
-        sleep(10)
-        # stop_ui()
-        print(121212112121)
+        # Check server status
+        while not check_server_status():
+            logger.info("Waiting for the server to start...")
+            sleep(1)
+        
+        
         run_application()
 
         if sys.platform == "win32":
@@ -67,7 +70,6 @@ def main() -> None:
             def handle_signal(signum, frame):
                 logger.info(f"Signal {signum} received, stopping...")
                 manager.stop_all()
-                stop_ui()
                 sys.exit(0)
 
             signal.signal(signal.SIGTERM, handle_signal)
