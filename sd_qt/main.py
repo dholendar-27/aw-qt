@@ -17,13 +17,7 @@ logger = logging.getLogger(__name__)
 
 def check_server_status():
     try:
-        $processName = "myprocess.exe"
-$process = Get-Process | Where-Object { $_.ProcessName -eq $processName }
-
-if ($process) {
-    Write-Output "ERROR: Process $processName is running. Please close it before uninstalling."
-    Exit 1
-}  # Replace with your actual server health check endpoint
+        response = requests.get("http://localhost:7600/api/0server_status")  # Replace with your actual server health check endpoint
         if response.status_code == 200:
             return True
         else:
