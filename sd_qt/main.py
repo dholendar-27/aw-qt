@@ -9,13 +9,11 @@ import requests
 from time import sleep
 
 from sd_core.log import setup_logging
-from .manager import Manager
+from sd_qt.manager import Manager
 from .config import AwQtSettings
 from .sd_desktop.sundial import run_application
-from .sd_qt.sd_desktop.sundialStartup import AppController
 
 logger = logging.getLogger(__name__)
-app = AppController()
 
 def check_server_status():
     try:
