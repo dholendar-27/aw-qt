@@ -15,17 +15,6 @@ from .sd_desktop.sundial import run_application
 
 logger = logging.getLogger(__name__)
 
-def check_server_status():
-    try:
-        response = requests.get("http://localhost:7600/api/0server_status")  # Replace with your actual server health check endpoint
-        if response.status_code == 200:
-            return True
-        else:
-            return False
-    except requests.RequestException as e:
-        logger.error(f"Error checking server status: {e}")
-        return False
-
 def main() -> None:
     """
     The main function of the application.
@@ -50,13 +39,7 @@ def main() -> None:
 
         manager = Manager()
         
-        manager.autostart(["sd-server"])
-        # Check server status
-        while not check_server_status():
-            logger.info("Waiting for the server to start...")
-            sleep(1)
-        
-        
+        # manager.autostart(["sd-server"])
         run_application()
 
         if sys.platform == "win32":
