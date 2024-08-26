@@ -9,6 +9,7 @@ import requests
 from time import sleep
 
 from sd_core.log import setup_logging
+from sd_qt.keychain_script import clear_keys
 from sd_qt.manager import Manager
 from .config import AwQtSettings
 from .sd_desktop.sundial import run_application
@@ -34,6 +35,8 @@ def main() -> None:
                 os.setpgrp()
             except PermissionError:
                 logger.warning("Permission denied when trying to set process group")
+
+        clear_keys()
 
         config = AwQtSettings()
 
