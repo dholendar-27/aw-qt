@@ -5,7 +5,7 @@ import subprocess
 import webbrowser
 from typing import Any, Optional, Dict
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QSystemTrayIcon,
     QMenu,
@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 import getpass
 import time
-from PyQt6.QtGui import QIcon
+from PySide6.QtGui import QIcon
 # Assuming sd_core and other imports are correct
 # import sd_core
 from .manager import Manager, Module # Ensure this does not start the event loop
