@@ -4,12 +4,12 @@ from sd_core.cache import delete_password, clear_all_credentials, cache_user_cre
 
 file_path = get_data_dir("sd-qt")
 config_file_path = os.path.join(file_path, "deletion_done.txt")
-
+CACHE_KEY = "Sundial"
 
 def delete_data():
-    delete_password("SD_KEYS")
+    delete_password(CACHE_KEY)
     clear_all_credentials()
-    if cache_user_credentials("SD_KEYS") == None:
+    if cache_user_credentials(CACHE_KEY) == None:
         return True
     else:
         return False
