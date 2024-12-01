@@ -1,140 +1,170 @@
 import sys
 import logging
-import os
 import subprocess
+import time
 import webbrowser
-from typing import Any, Optional, Dict
-
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QSystemTrayIcon,
+    QMessageBox,
     QMenu,
     QWidget,
 )
-import getpass
-import time
-from PyQt6.QtGui import QIcon
-# Assuming sd_core and other imports are correct
-# import sd_core
-from .manager import Manager, Module # Ensure this does not start the event loop
-
-if sys.platform == "win32":
-    import win32com.client
+from PySide6.QtGui import QIcon, QAction
+from PySide6 import QtCore
+from pathlib import Path
+import os
+from .util import retrieve_settings, add_settings
+from .manager import Manager
 
 logger = logging.getLogger(__name__)
 
-def get_env() -> Dict[str, str]:
-    env = dict(os.environ)
-    lp_key = "LD_LIBRARY_PATH"
-    lp_orig = env.get(lp_key + "_ORIG")
-    if lp_orig is not None:
-        env[lp_key] = lp_orig
-    else:
-        env.pop(lp_key, None)
-    return env
+manager = Manager()
 
+# Function to open URLs
 def open_url(url: str) -> None:
     if sys.platform == "linux":
-        env = get_env()
-        subprocess.Popen(["xdg-open", url], env=env)
+        subprocess.Popen(["xdg-open", url])
     else:
         webbrowser.open(url)
 
 def open_webui(root_url: str) -> None:
-    print("Opening dashboard")
+    """Open the web dashboard."""
     open_url(root_url)
 
-def open_apibrowser(root_url: str) -> None:
-    print("Opening api browser")
-    open_url(root_url + "/api")
-
 def open_dir(d: str) -> None:
+    """Open a directory in the system's default file manager."""
     if sys.platform == "win32":
         os.startfile(d)
     elif sys.platform == "darwin":
         subprocess.Popen(["open", d])
     else:
-        env = get_env()
-        subprocess.Popen(["xdg-open", d], env=env)
-
-def check_user_switch(manager: Manager) -> None:
-    wmi = win32com.client.GetObject('winmgmts:')
-    for session in wmi.InstancesOf('Win32_ComputerSystem'):
-        if session.UserName is not None:
-            time.sleep(3)
-            username = session.UserName.split('\\')[-1]
-            if username != getpass.getuser():
-                logger.warning("Mismatch detected. Exiting...")
-                exit(manager)
+        subprocess.Popen(["xdg-open", d])
 
 class TrayIcon(QSystemTrayIcon):
-    def __init__(
-            self,
-            manager: Manager,
-            icon: QIcon,
-            parent: Optional[QWidget] = None,
-            testing: bool = False,
-    ) -> None:
-        QSystemTrayIcon.__init__(self, icon, parent)
+    def __init__(self, icon: QIcon, parent: QWidget = None):
+        super().__init__(icon, parent)
         self._parent = parent
-        self.setToolTip("ActivityWatch" + (" (testing)" if testing else ""))
-
-        self.manager = manager
-        self.testing = testing
-
-        self.root_url = f"http://localhost:{5666 if self.testing else 7600}"
+        self.root_url = "http://localhost:7600"
         self.activated.connect(self.on_activated)
 
-        self._build_rootmenu()
+        self.settings = None  # Initially, settings will be None
+        self._build_rootmenu()  # Build the tray menu initially (empty or with default options)
 
-    def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            open_webui(self.root_url)
-
-    def _build_rootmenu(self) -> None:
+    def _build_rootmenu(self):
+        """Build the context menu based on the settings."""
         menu = QMenu(self._parent)
 
-        if self.testing:
-            menu.addAction("Running in testing mode")
+        # Fetch settings dynamically every time the tray menu is opened
+        self.settings = retrieve_settings()  # Retrieve settings from the server
+
+        if self.settings:
+            # Settings are available, show options like Dashboard, Launch on Start, Idle Time, and Schedule
+            menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
+
+            # Launch on Start (with a checkbox)
+            self.launch_action = QAction("Launch on Start", self)
+            self.launch_action.setCheckable(True)
+            self.launch_action.setChecked(self.settings.get("launch", False))
+            self.launch_action.triggered.connect(self.toggle_launch_on_start)
+            menu.addAction(self.launch_action)
+
+            # Enable Idle Time (with a checkbox)
+            self.idle_time_action = QAction("Enable Idle Time", self)
+            self.idle_time_action.setCheckable(True)
+            self.idle_time_action.setChecked(self.settings.get("idle_time", False))
+            self.idle_time_action.triggered.connect(self.toggle_idle_time)
+            menu.addAction(self.idle_time_action)
+
+            # Schedule sub-menu with days of the week
+            weekdays = self.settings.get('weekdays_schedule', {})
+            schedule_menu = menu.addMenu("Schedule")
+            for day, enabled in weekdays.items():
+                if day not in ["endtime", "starttime"]:  # Skip endtime/starttime
+                    day_action = QAction(f"{day}", self)
+                    day_action.setCheckable(True)
+                    day_action.setChecked(enabled)
+                    day_action.triggered.connect(lambda _, d=day: self.toggle_day_schedule(d))
+                    schedule_menu.addAction(day_action)
+
             menu.addSeparator()
 
-        menu.addAction("Open Sundial", lambda: run_application())
-        menu.addSeparator()
-        exitIcon = QIcon.fromTheme(
-            "application-exit", QIcon("media/application_exit.png")
-        )
-        if exitIcon.availableSizes():
-            menu.addAction(exitIcon, "Quit Sundial", lambda: exit(self.manager))
         else:
-            menu.addAction("Quit Sundial", lambda: exit(self.manager))
+            # If settings are not available (first time user or no settings), show the login option
+            menu.addAction("Login",  lambda: open_webui(self.root_url))
+
+        # Quit option always available
+        menu.addAction("Quit", quit_application)
+
         self.setContextMenu(menu)
 
-    def _build_modulemenu(self, moduleMenu: QMenu) -> None:
-        moduleMenu.clear()
+    def toggle_launch_on_start(self):
+        """Toggle the 'Launch on Start' setting."""
+        launch_on_start = not self.settings.get("launch", False)
+        add_settings("launch", launch_on_start)
+        self.launch_action.setChecked(launch_on_start)  # Update the checkbox state
+        logger.info(f"Launch on start set to {launch_on_start}")
 
-        def add_module_menuitem(module: Module) -> None:
-            title = module.name
-            ac = moduleMenu.addAction(title, lambda: module.toggle(self.testing))
-            ac.setData(module)
-            ac.setCheckable(True)
-            ac.setChecked(module.is_alive())
+    def toggle_idle_time(self):
+        """Toggle the 'Idle Time' setting."""
+        idle_time = not self.settings.get("idle_time", False)
+        add_settings("idle_time", idle_time)
+        self.idle_time_action.setChecked(idle_time)  # Update the checkbox state
+        logger.info(f"Idle time set to {idle_time}")
 
-        for location, modules in [
-            ("bundled", self.manager.modules_bundled),
-            ("system", self.manager.modules_system),
-        ]:
-            header = moduleMenu.addAction(location)
-            header.setEnabled(False)
+    def toggle_day_schedule(self, day: str):
+        """Toggle schedule for a specific day."""
+        weekdays_schedule = self.settings.get('weekdays_schedule', {})
+        current_state = weekdays_schedule.get(day, False)
+        weekdays_schedule[day] = not current_state
+        add_settings("weekdays_schedule", weekdays_schedule)
+        logger.info(f"Schedule for {day} set to {not current_state}")
 
-            for module in sorted(modules, key=lambda m: m.name):
-                add_module_menuitem(module)
+    def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        """Handle tray icon activation."""
+        if reason == QSystemTrayIcon.ActivationReason.Context:
+            self._build_rootmenu()  # Rebuild the context menu every time it's opened
+        elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            open_webui(self.root_url)
 
-def exit(manager: Manager) -> None:
-    print("Shutdown initiated, stopping all services...")
-    manager.stop_all()
-    QApplication.quit()
+# Quit the application properly
+def quit_application() -> None:
+    """Gracefully shut down the application."""
+    logger.info("Shutting down...")
+    manager.stop_all_watchers()
+    logger.info("All watchers stopped.")
+    time.sleep(2)
+    QApplication.quit()  # Ensure the event loop quits
+    sys.exit(0)
 
+# Run the application
+def run() -> int:
+    """Initialize and run the PySide6 application."""
+    logger.info("Starting application...")
+
+    app = QApplication(sys.argv)
+
+    scriptdir = Path(__file__).parent
+
+    # Add search paths for icon resources
+    QtCore.QDir.addSearchPath("icons", str(scriptdir.parent / "media/logo/"))
+    QtCore.QDir.addSearchPath("icons", str(scriptdir.parent.parent / "Resources/sd_qt/media/logo/"))
+
+    # Set up the tray icon
+    if sys.platform == "darwin":
+        icon = QIcon("icons:black-monochrome-logo.png")
+        icon.setIsMask(True)  # Allow macOS to use filters for changing the icon's color
+    else:
+        icon = QIcon("icons:logo.png")
+
+    if not icon.isNull():
+        tray_icon = TrayIcon(icon)  # Create the tray icon
+        tray_icon.show()
+
+    QApplication.setQuitOnLastWindowClosed(False)
+
+    logger.info("Application initialized successfully.")
+    return app.exec()
 
 if __name__ == "__main__":
-    manager = Manager()  # Initialize your manager here
-    sys.exit(run())  # Ensure the event loop is started only once
+    run()

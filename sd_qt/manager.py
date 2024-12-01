@@ -567,6 +567,23 @@ class Manager:
         if server_module and server_module.is_alive():
             server_module.stop()
 
+    def stop_all_watchers(self) -> None:
+        """
+         Stop all servers and their modules. This is useful for tests that want to clean up after a server has been stopped.
+
+
+         @return None on success None on failure ( no exception raised
+        """
+
+        # Find 'sd-server' module and temporarily exclude it from the stop process
+        # This method will stop the server module if it is alive.
+        for module in self.modules:
+            print(module)
+            # This method is called by the server when the module is alive.
+            if module.is_alive():
+                module.stop()
+
+
     def print_status(self, module_name: Optional[str] = None) -> None:
         """
          Print status of modules. If module_name is specified print status of module with that name

@@ -5,14 +5,16 @@ import subprocess
 import platform
 import signal
 import threading
+from pathlib import Path
+
 import requests
 from time import sleep
-
+from PySide6.QtWidgets import QApplication
 from sd_core.log import setup_logging
 from sd_qt.keychain_script import clear_keys
 from sd_qt.manager import Manager
 from .config import AwQtSettings
-from .sd_desktop.main import run_application
+from .trayicon import run
 
 logger = logging.getLogger(__name__)
 
@@ -41,9 +43,11 @@ def main() -> None:
         config = AwQtSettings()
 
         manager = Manager()
-        
         manager.autostart(["sd-server"])
-        run_application()
+
+        run()
+        
+        # manager.autostart(["sd-server"])
 
         if sys.platform == "win32":
             try:
