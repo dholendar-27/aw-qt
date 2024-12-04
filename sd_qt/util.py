@@ -20,24 +20,21 @@ def add_settings(key, value):
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json'}
     data = json.dumps({"code": key, "value": value})
     settings = requests.post(host + "/0/settings", data=data, headers=headers)
-    print("############", settings.json())
     cache[cache_key] = settings.json()
 
 def retrieve_settings():
     creds = credentials()
-    sundail_token = ""
-    cached_settings = cache.get(cache_key)
-    if cached_settings:
-        return cached_settings
-    else:
-        if creds:
-            sundail_token = creds["token"] if creds['token'] else None
-        try:
-            sett = requests.get(host + "/0/getallsettings", headers={"Authorization": sundail_token})
-            settings = sett.json()
-            cache[cache_key] = settings  # Cache the settings
-            print(settings)
-        except Exception as e:
-            print(f"Error retrieving settings: {e}")
-            settings = {}
-        return settings
+    if creds:
+        sundail_token = creds["token"] if creds['token'] else None
+    try:
+        sett = requests.get(host + "/0/getallsettings", headers={"Authorization": sundail_token})
+        settings = sett.json()
+    except Exception as e:
+        print(f"Error retrieving settings: {e}")
+        settings = {}
+    return settings
+
+def user_status():
+    creds = credentials()
+    if creds:
+        return creds['userId']
