@@ -38,3 +38,29 @@ def user_status():
     creds = credentials()
     if creds:
         return creds['userId']
+
+def idletime_settings(status):
+    sundial_token = ""
+    creds = credentials()
+    print(status)
+    if creds:
+        sundail_token = creds["token"] if creds['token'] else None
+    headers = {'Content-Type': 'application/json', 'Accept': 'application/json',"Authorization": sundail_token}
+    data = json.dumps({"status": status})
+    response = requests.post(host + "/0/idletime", data=data, headers=headers)
+
+    if response.status_code == 200:
+        print(f"Success: {response.json()['message']}")
+    else:
+        print(f"Error: {response.json().get('message', 'Unknown error')}")
+
+
+
+def launchon_start(status):
+    sundial_token = ""
+    creds = credentials()
+    if creds:
+        sundail_token = creds["token"] if creds['token'] else None
+    headers = {'Content-Type': 'application/json', 'Accept': 'application/json',"Authorization": sundail_token}
+    data = json.dumps({"status": status})
+    settings = requests.post(host + "/0/launchOnStart", data=data, headers=headers)

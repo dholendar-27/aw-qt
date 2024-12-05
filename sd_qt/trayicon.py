@@ -3,15 +3,16 @@ import logging
 import subprocess
 import webbrowser
 from pathlib import Path
-from PySide6.QtCore import QTimer, QDir
+from PySide6.QtCore import QTimer, QDir, QCoreApplication
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox, QWidget
-from PySide6.QtGui import QIcon, QAction
-from .util import retrieve_settings, add_settings, user_status
+from PySide6.QtGui import QIcon, QAction, Qt
+from .util import retrieve_settings, add_settings, user_status, idletime_settings, launchon_start
 from .manager import Manager
 
 logger = logging.getLogger(__name__)
 
 manager = Manager()
+
 
 # Function to open URLs
 def open_url(url: str) -> None:
@@ -23,9 +24,11 @@ def open_url(url: str) -> None:
     except Exception as e:
         logger.error(f"Failed to open URL {url}: {e}")
 
+
 def open_webui(root_url: str) -> None:
     """Open the web dashboard."""
     open_url(root_url)
+
 
 def open_dir(d: str) -> None:
     """Open a directory in the system's default file manager."""
@@ -38,6 +41,7 @@ def open_dir(d: str) -> None:
             subprocess.Popen(["xdg-open", d])
     except Exception as e:
         logger.error(f"Failed to open directory {d}: {e}")
+
 
 class TrayIcon(QSystemTrayIcon):
     def __init__(self, icon: QIcon, parent: QWidget = None):
@@ -99,7 +103,9 @@ class TrayIcon(QSystemTrayIcon):
             menu.addAction("Login", lambda: open_webui(self.root_url))
 
         # Quit option (always available)
-        menu.addAction("Quit", quit_application)
+        quit_action = QAction("Quit", self)
+        quit_action.triggered.connect(self.quit_application)  # Connect quit action to quit_application method
+        menu.addAction(quit_action)
 
         self.setContextMenu(menu)
 
@@ -108,8 +114,9 @@ class TrayIcon(QSystemTrayIcon):
         try:
             logger.debug("Checking user status...")
             current_status = user_status()
-            if current_status:
+            if current_status != self.previous_status:
                 logger.info(f"User status changed: {self.previous_status} -> {current_status}")
+                self.previous_status = current_status
                 self._build_rootmenu()  # Rebuild menu on status change
         except Exception as e:
             logger.error(f"Error checking user status: {e}")
@@ -118,25 +125,38 @@ class TrayIcon(QSystemTrayIcon):
         """Toggle the 'Launch on Start' setting."""
         try:
             launch_on_start = not self.settings.get("launch", False)
-            add_settings("launch", launch_on_start)
+            launchon_start(launch_on_start)
             self.launch_action.setChecked(launch_on_start)
             logger.info(f"Launch on start set to {launch_on_start}")
         except Exception as e:
             logger.error(f"Failed to toggle Launch on Start: {e}")
 
     def toggle_idle_time(self):
-        """Toggle the 'Idle Time' setting."""
+        """Toggle the 'Idle Time' setting and update the backend API."""
         try:
-            idle_time = not self.settings.get("idle_time", False)
-            add_settings("idle_time", idle_time)
-            self.idle_time_action.setChecked(idle_time)
-            logger.info(f"Idle time set to {idle_time}")
+            # Get the current idle_time status from the settings
+            current_idle_time = self.settings.get("idle_time", False)
+
+            # Toggle the idle_time value
+            new_idle_time = not current_idle_time
+
+            # Update the local settings dictionary
+            self.settings["idle_time"] = new_idle_time
+
+            # Call the function to update the setting on the backend API
+            idletime_settings(new_idle_time)
+
+            # Update the UI element (the checkbox in the tray menu)
+            self.idle_time_action.setChecked(new_idle_time)
+
+            # Log the action
+            logger.info(f"Idle time set to {new_idle_time}")
+
         except Exception as e:
+            # Log any errors that occur during the process
             logger.error(f"Failed to toggle Idle Time: {e}")
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
-        print(f"Activated with reason: {reason}")
-
         """Handle tray icon activation."""
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             logger.debug("Tray icon context menu activated.")
@@ -145,16 +165,20 @@ class TrayIcon(QSystemTrayIcon):
             logger.debug("Tray icon double-clicked. Opening dashboard.")
             open_webui(self.root_url)
 
-def quit_application() -> None:
-    """Gracefully shut down the application."""
-    logger.info("Shutting down application...")
-    try:
-        manager.stop_all_watchers()
-        logger.info("All watchers stopped.")
-    except Exception as e:
-        logger.error(f"Error stopping watchers: {e}")
-    QApplication.quit()
-    sys.exit(0)
+    def quit_application(self):
+        """Gracefully shut down the application."""
+        logger.info("Shutting down application...")
+        # Stop all watchers if necessary
+        try:
+            manager.stop_all()
+            logger.info("All watchers stopped.")
+        except Exception as e:
+            logger.error(f"Error stopping watchers: {e}")
+
+        # Close the application by quitting the event loop
+        QApplication.quit()
+        sys.exit(0)
+
 
 def run() -> int:
     """Initialize and run the PySide6 application."""
@@ -176,16 +200,18 @@ def run() -> int:
             icon = QIcon("icons:logo.png")
 
         if not icon.isNull():
-            tray_icon = TrayIcon(icon)
-            tray_icon.show()
+            tray_icon = TrayIcon(icon)  # Create the tray icon instance
+            tray_icon.show()  # Show the tray icon
         else:
             logger.error("Failed to load tray icon.")
     except Exception as e:
         logger.error(f"Error initializing tray icon: {e}")
 
-    QApplication.setQuitOnLastWindowClosed(False)
+    QApplication.setQuitOnLastWindowClosed(False)  # Ensure the app doesn't quit when the window is closed
+
     logger.info("Application initialized successfully.")
     return app.exec()
+
 
 if __name__ == "__main__":
     run()
