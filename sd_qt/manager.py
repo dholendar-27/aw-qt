@@ -558,11 +558,22 @@ class Manager:
 
         # Find 'sd-server' module and temporarily exclude it from the stop process
         # This method will stop the server module if it is alive.
+        server_module_name = "sd-server"
+        server_module = None
+
+        # Find 'sd-server' module and temporarily exclude it from the stop process
+        # This method will stop the server module if it is alive.
         for module in self.modules:
-            print(module)
             # This method is called by the server when the module is alive.
-            if module.is_alive():
+            if module.name == server_module_name:
+                server_module = module
+            elif module.is_alive():
                 module.stop()
+
+        # Finally, stop 'sd-server' if it's running
+        # Stop the server module if it is alive.
+        if server_module and server_module.is_alive():
+            server_module.stop()
 
 
     def print_status(self, module_name: Optional[str] = None) -> None:

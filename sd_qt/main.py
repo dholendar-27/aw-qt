@@ -42,6 +42,8 @@ def main() -> None:
 
         config = AwQtSettings()
 
+
+
         manager = Manager()
         manager.autostart(["sd-server"])
 

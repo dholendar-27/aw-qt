@@ -2,7 +2,8 @@
 import json
 import requests
 from cachetools import LRUCache
-from sd_core.cache import cache_user_credentials
+from sd_core.cache import cache_user_credentials, clear_all_credentials
+from sd_core.db_cache import delete
 
 host = "http://localhost:7600/api"
 cache = LRUCache(maxsize=100)
@@ -22,6 +23,11 @@ def add_settings(key, value):
     settings = requests.post(host + "/0/settings", data=data, headers=headers)
     cache[cache_key] = settings.json()
 
+def cached_credentials():
+    credentials = requests.get(host + "/0/userCredentials")
+    print(credentials)
+    return credentials
+
 def retrieve_settings():
     creds = credentials()
     if creds:
@@ -29,6 +35,7 @@ def retrieve_settings():
     try:
         sett = requests.get(host + "/0/getallsettings", headers={"Authorization": sundail_token})
         settings = sett.json()
+        print(settings)
     except Exception as e:
         print(f"Error retrieving settings: {e}")
         settings = {}
@@ -39,15 +46,13 @@ def user_status():
     if creds:
         return creds['userId']
 
-def idletime_settings(status):
+def idletime_settings():
     sundial_token = ""
     creds = credentials()
-    print(status)
     if creds:
         sundail_token = creds["token"] if creds['token'] else None
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json',"Authorization": sundail_token}
-    data = json.dumps({"status": status})
-    response = requests.post(host + "/0/idletime", data=data, headers=headers)
+    response = requests.get(host + "/0/idletime", headers=headers)
 
     if response.status_code == 200:
         print(f"Success: {response.json()['message']}")
@@ -64,3 +69,6 @@ def launchon_start(status):
     headers = {'Content-Type': 'application/json', 'Accept': 'application/json',"Authorization": sundail_token}
     data = json.dumps({"status": status})
     settings = requests.post(host + "/0/launchOnStart", data=data, headers=headers)
+
+def signout():
+    settings = requests.get(host + "/0/signout")

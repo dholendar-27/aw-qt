@@ -6,7 +6,8 @@ from pathlib import Path
 from PySide6.QtCore import QTimer, QDir, QCoreApplication
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QMessageBox, QWidget
 from PySide6.QtGui import QIcon, QAction, Qt
-from .util import retrieve_settings, add_settings, user_status, idletime_settings, launchon_start
+from .util import retrieve_settings, add_settings, user_status, idletime_settings, launchon_start, signout, \
+    cached_credentials
 from .manager import Manager
 
 logger = logging.getLogger(__name__)
@@ -17,12 +18,14 @@ manager = Manager()
 # Function to open URLs
 def open_url(url: str) -> None:
     try:
+        print(f"Opening URL: {url}")  # Debugging line
         if sys.platform == "linux":
             subprocess.Popen(["xdg-open", url])
         else:
             webbrowser.open(url)
     except Exception as e:
         logger.error(f"Failed to open URL {url}: {e}")
+
 
 
 def open_webui(root_url: str) -> None:
@@ -67,40 +70,47 @@ class TrayIcon(QSystemTrayIcon):
         logger.debug("Rebuilding tray menu...")
         menu = QMenu(self._parent)
 
-        try:
-            self.settings = retrieve_settings()
-        except Exception as e:
-            logger.error(f"Failed to retrieve settings: {e}")
-            self.settings = {}
+        # Retrieve the cached credentials (if any)
+        self.credentials = cached_credentials().json()
+        print(self.credentials)
 
-        if self.settings:
-            # User is logged in
+        if self.credentials and self.credentials.get("userId"):
+            # User is logged in, build the logged-in menu
             logger.debug("User is logged in. Building logged-in menu.")
-            menu.addAction("Open Dashboard", lambda: open_webui(self.root_url))
 
-            # Launch on Start
+            self.settings = retrieve_settings()
+
+            # Launch on Start action
             self.launch_action = QAction("Launch on Start", self)
             self.launch_action.setCheckable(True)
             self.launch_action.setChecked(self.settings.get("launch", False))
             self.launch_action.triggered.connect(self.toggle_launch_on_start)
             menu.addAction(self.launch_action)
 
-            # Enable Idle Time
+            # Enable Idle Time action
             self.idle_time_action = QAction("Enable Idle Time", self)
             self.idle_time_action.setCheckable(True)
             self.idle_time_action.setChecked(self.settings.get("idle_time", False))
             self.idle_time_action.triggered.connect(self.toggle_idle_time)
             menu.addAction(self.idle_time_action)
 
-            # Schedule Menu
+            # Schedule Menu action
             self.schedule_menu = QAction("Schedule", self)
             self.schedule_menu.triggered.connect(lambda: open_webui(self.root_schedule))
             menu.addAction(self.schedule_menu)
             menu.addSeparator()
+
+            # Sign Out action
+            self.signout = QAction("Sign Out", self)
+            self.signout.triggered.connect(self.sign_out)
+            menu.addAction(self.signout)
+
         else:
-            # User is not logged in
+            # User is not logged in, add the "Login" action
             logger.debug("User is not logged in. Building login menu.")
-            menu.addAction("Login", lambda: open_webui(self.root_url))
+            login_action = QAction("Login", self)
+            login_action.triggered.connect(lambda: open_webui(self.root_url))  # Open browser to login page
+            menu.addAction(login_action)
 
         # Quit option (always available)
         quit_action = QAction("Quit", self)
@@ -144,7 +154,7 @@ class TrayIcon(QSystemTrayIcon):
             self.settings["idle_time"] = new_idle_time
 
             # Call the function to update the setting on the backend API
-            idletime_settings(new_idle_time)
+            idletime_settings()
 
             # Update the UI element (the checkbox in the tray menu)
             self.idle_time_action.setChecked(new_idle_time)
@@ -155,6 +165,11 @@ class TrayIcon(QSystemTrayIcon):
         except Exception as e:
             # Log any errors that occur during the process
             logger.error(f"Failed to toggle Idle Time: {e}")
+
+
+    def sign_out(self):
+        signout()
+        manager.stop_all_watchers()
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         """Handle tray icon activation."""
