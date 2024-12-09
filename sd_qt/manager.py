@@ -652,6 +652,7 @@ class Manager:
                 return status
             else:
                 logger.error(f"Module {module_name} not found")
+                return {"is_alive": False}
 
     def stop_modules(self, module_name: str) -> str:
         """
