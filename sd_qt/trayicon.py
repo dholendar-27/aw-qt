@@ -165,6 +165,29 @@ class TrayIcon(QSystemTrayIcon):
         sys.exit(0)
 
 
+# def run() -> int:
+#     """Initialize and run the PySide6 application."""
+#     app = QApplication(sys.argv)
+#     scriptdir = Path(__file__).parent
+
+#     # Add search paths for icon resources
+#     QDir.addSearchPath("icons", str(scriptdir.parent / "media/logo/"))
+#     QDir.addSearchPath("icons", str(scriptdir.parent.parent / "Resources/sd_qt/media/logo/"))
+
+#     # Set up the tray icon
+#     icon_path = "icons:black-monochrome-logo.png" if sys.platform == "darwin" else "icons:logo.png"
+#     icon = QIcon(icon_path)
+
+#     if icon.isNull():
+#         logger.error("Failed to load tray icon.")
+#         return -1
+
+#     tray_icon = TrayIcon(icon)
+#     tray_icon.show()
+#     QApplication.setQuitOnLastWindowClosed(False)
+#     return app.exec()
+
+
 def run() -> int:
     """Initialize and run the PySide6 application."""
     app = QApplication(sys.argv)
@@ -182,7 +205,19 @@ def run() -> int:
         logger.error("Failed to load tray icon.")
         return -1
 
+    # Create the tray icon
     tray_icon = TrayIcon(icon)
+
+    # Define a slot to handle single clicks
+    def on_tray_icon_activated(reason):
+        if reason == QSystemTrayIcon.Trigger:  # Single click
+            logger.info("Tray icon single-clicked.")
+            # Add your desired behavior here, e.g., showing a menu or window
+            tray_icon.showMessage("Tray Icon", "You single-clicked the tray icon!")
+
+    # Connect the activated signal
+    tray_icon.activated.connect(on_tray_icon_activated)
+
     tray_icon.show()
     QApplication.setQuitOnLastWindowClosed(False)
     return app.exec()
