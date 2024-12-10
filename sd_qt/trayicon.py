@@ -176,7 +176,7 @@ class TrayIcon(QSystemTrayIcon):
         if reason == QSystemTrayIcon.ActivationReason.Trigger:
             self.update_menu()
         elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
-            open_webui(self.root_url)
+            self.open_webui(self.root_url)
 
     def quit_application(self):
         """Quit the application."""
