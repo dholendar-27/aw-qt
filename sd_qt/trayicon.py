@@ -4,10 +4,11 @@ import subprocess
 import webbrowser
 import os
 from pathlib import Path
-from PySide6.QtCore import QTimer, QDir, QCoreApplication
+from PySide6.QtCore import QTimer, QDir, Qt, QCoreApplication, QThread, Signal
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget
-from PySide6.QtGui import QIcon, QAction
-from .util import retrieve_settings, add_settings, user_status, idletime_settings, launchon_start, signout, cached_credentials
+from PySide6.QtGui import QIcon,QAction
+from .util import retrieve_settings, add_settings, user_status, idletime_settings, launchon_start, signout, \
+    cached_credentials
 from .manager import Manager
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,33 @@ def open_dir(d: str) -> None:
         logger.error(f"Failed to open directory {d}: {e}")
 
 
+class SignOutThread(QThread):
+    finished = Signal()
+
+    def run(self):
+        """Handles sign-out process in the background."""
+        try:
+            signout()
+            manager.stop_all_watchers()  # This may take time
+            self.finished.emit()  # Emit signal when done
+        except Exception as e:
+            logger.error(f"Error during sign-out: {e}")
+            self.finished.emit()
+
+
+class LoginThread(QThread):
+    finished = Signal()
+
+    def run(self):
+        """Handles the login process in the background."""
+        try:
+            open_webui("http://localhost:7600")  # Open the login URL
+            self.finished.emit()  # Emit signal when done
+        except Exception as e:
+            logger.error(f"Error during login: {e}")
+            self.finished.emit()
+
+
 class TrayIcon(QSystemTrayIcon):
     def __init__(self, icon: QIcon, parent: QWidget = None):
         super().__init__(icon, parent)
@@ -63,43 +91,60 @@ class TrayIcon(QSystemTrayIcon):
         self.status_timer.timeout.connect(self.check_user_status)
         self.status_timer.start(60000)  # Every 60 seconds
 
+        # Create background threads for login/signout
+        self.sign_out_thread = None
+        self.login_thread = None
+
     def update_menu(self):
         """Rebuild the tray menu based on the current user status."""
         menu = QMenu(self._parent)
-        self.credentials = cached_credentials().json()
 
-        if self.credentials and self.credentials.get("userId"):
-            # User is logged in
-            self.settings = retrieve_settings()
+        # Fetch the cached credentials safely
+        self.credentials = cached_credentials()
 
-            # Launch on Start action
-            launch_action = QAction("Launch on Start", self)
-            launch_action.setCheckable(True)
-            launch_action.setChecked(self.settings.get("launch", False))
-            launch_action.triggered.connect(self.toggle_launch_on_start)
-            menu.addAction(launch_action)
+        # Check if credentials are None or invalid
+        if self.credentials:
+            # If credentials are valid, we can proceed to build the menu based on the logged-in user
+            user_data = self.credentials.json() if hasattr(self.credentials, 'json') else self.credentials
+            user_id = user_data.get("userId") if isinstance(user_data, dict) else None
 
-            # Enable Idle Time action
-            idle_time_action = QAction("Enable Idle Time", self)
-            idle_time_action.setCheckable(True)
-            idle_time_action.setChecked(self.settings.get("idle_time", False))
-            idle_time_action.triggered.connect(self.toggle_idle_time)
-            menu.addAction(idle_time_action)
+            if user_id:
+                # User is logged in
+                self.settings = retrieve_settings()
 
-            # Schedule Menu action
-            schedule_menu = QAction("Schedule", self)
-            schedule_menu.triggered.connect(lambda: open_webui(self.root_schedule))
-            menu.addAction(schedule_menu)
-            menu.addSeparator()
+                # Launch on Start action
+                launch_action = QAction("Launch on Start", self)
+                launch_action.setCheckable(True)
+                launch_action.setChecked(self.settings.get("launch", False))
+                launch_action.triggered.connect(self.toggle_launch_on_start)
+                menu.addAction(launch_action)
 
-            # Sign Out action
-            signout_action = QAction("Sign Out", self)
-            signout_action.triggered.connect(self.sign_out)
-            menu.addAction(signout_action)
+                # Enable Idle Time action
+                idle_time_action = QAction("Enable Idle Time", self)
+                idle_time_action.setCheckable(True)
+                idle_time_action.setChecked(self.settings.get("idle_time", False))
+                idle_time_action.triggered.connect(self.toggle_idle_time)
+                menu.addAction(idle_time_action)
+
+                # Schedule Menu action
+                schedule_menu = QAction("Schedule", self)
+                schedule_menu.triggered.connect(lambda: open_webui(self.root_schedule))
+                menu.addAction(schedule_menu)
+                menu.addSeparator()
+
+                # Sign Out action
+                signout_action = QAction("Sign Out", self)
+                signout_action.triggered.connect(self.sign_out)
+                menu.addAction(signout_action)
+            else:
+                # If userId is missing or invalid, we show the Login option
+                login_action = QAction("Login", self)
+                login_action.triggered.connect(self.sign_in)
+                menu.addAction(login_action)
         else:
-            # User is not logged in
+            # If no credentials are found, show the Login option
             login_action = QAction("Login", self)
-            login_action.triggered.connect(lambda: open_webui(self.root_url))
+            login_action.triggered.connect(self.sign_in)
             menu.addAction(login_action)
 
         # Quit option
@@ -107,6 +152,7 @@ class TrayIcon(QSystemTrayIcon):
         quit_action.triggered.connect(self.quit_application)
         menu.addAction(quit_action)
 
+        # Set the tray menu
         self.setContextMenu(menu)
 
     def check_user_status(self):
@@ -141,12 +187,27 @@ class TrayIcon(QSystemTrayIcon):
 
     def sign_out(self):
         """Sign out the user and update the menu."""
-        try:
-            signout()
-            manager.stop_all_watchers()
-            self.update_menu()
-        except Exception as e:
-            logger.error(f"Failed to sign out: {e}")
+        if not self.sign_out_thread or not self.sign_out_thread.isRunning():
+            self.sign_out_thread = SignOutThread()
+            self.sign_out_thread.finished.connect(self.on_sign_out_finished)
+            self.sign_out_thread.start()
+
+    def on_sign_out_finished(self):
+        """Called when sign out is complete."""
+        self.update_menu()  # Rebuild menu after signout
+        logger.info("Sign-out complete.")
+
+    def sign_in(self):
+        """Start the login process in the background."""
+        if not self.login_thread or not self.login_thread.isRunning():
+            self.login_thread = LoginThread()
+            self.login_thread.finished.connect(self.on_login_finished)
+            self.login_thread.start()
+
+    def on_login_finished(self):
+        """Handle login UI updates once login is complete."""
+        self.update_menu()  # Rebuild the menu after successful login
+        logger.info("Login complete.")
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason):
         """Handle tray icon activation."""
@@ -173,17 +234,19 @@ def run() -> int:
     # Add search paths for icon resources
     QDir.addSearchPath("icons", str(scriptdir.parent / "media/logo/"))
     QDir.addSearchPath("icons", str(scriptdir.parent.parent / "Resources/sd_qt/media/logo/"))
-
+    print(f"search paths: {QDir.searchPaths('icons')}")
     # Set up the tray icon
     icon_path = "icons:black-monochrome-logo.png" if sys.platform == "darwin" else "icons:logo.png"
+
     icon = QIcon(icon_path)
 
     if icon.isNull():
-        logger.error("Failed to load tray icon.")
+        logger.error(f"Failed to load tray icon from path: {icon_path}")
         return -1
 
     tray_icon = TrayIcon(icon)
     tray_icon.show()
+
     QApplication.setQuitOnLastWindowClosed(False)
     return app.exec()
 
