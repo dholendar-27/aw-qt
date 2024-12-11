@@ -566,14 +566,10 @@ class Manager:
         for module in self.modules:
             # This method is called by the server when the module is alive.
             if module.name == server_module_name:
-                server_module = module
+                print("-------->",self.modules)
+                continue
             elif module.is_alive():
                 module.stop()
-
-        # Finally, stop 'sd-server' if it's running
-        # Stop the server module if it is alive.
-        if server_module and server_module.is_alive():
-            server_module.stop()
 
 
     def print_status(self, module_name: Optional[str] = None) -> None:
