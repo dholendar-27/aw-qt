@@ -545,7 +545,6 @@ class Manager:
 
     def stop_all(self) -> None:
         for module in filter(lambda m: m.is_alive(), self.modules):
-            print(module)
             module.stop()
 
     def stop_all_watchers(self) -> None:
@@ -569,12 +568,6 @@ class Manager:
                 server_module = module
             elif module.is_alive():
                 module.stop()
-
-        # Finally, stop 'sd-server' if it's running
-        # Stop the server module if it is alive.
-        if server_module and server_module.is_alive():
-            server_module.stop()
-
 
     def print_status(self, module_name: Optional[str] = None) -> None:
         """

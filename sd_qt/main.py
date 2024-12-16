@@ -45,11 +45,11 @@ def main() -> None:
 
 
         manager = Manager()
+        manager.stop_all()
         manager.autostart(["sd-server"])
 
         run()
-        
-        # manager.autostart(["sd-server"])
+
 
         if sys.platform == "win32":
             try:
