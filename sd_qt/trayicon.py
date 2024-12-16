@@ -4,14 +4,14 @@ import subprocess
 import webbrowser
 import os
 from pathlib import Path
-from PySide6.QtCore import QTimer, QDir, Qt, QCoreApplication, QThread, Signal, QObject
+from PySide6.QtCore import QTimer, QDir, Qt, QCoreApplication, QThread, Signal
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget
-from PySide6.QtGui import QIcon, QAction
+from PySide6.QtGui import QIcon,QAction
 from .util import retrieve_settings, add_settings, user_status, idletime_settings, launchon_start, signout, \
     cached_credentials
 from .manager import Manager
-
-# Initialize logger
+import multiprocessing
+import webview
 logger = logging.getLogger(__name__)
 
 manager = Manager()
@@ -22,14 +22,17 @@ def open_url(url: str) -> None:
         if sys.platform == "linux":
             subprocess.Popen(["xdg-open", url])
         else:
-            webbrowser.open(url)
+            webview.create_window('Sundial', 'http://localhost:7600')
+            webview.start()
     except Exception as e:
         logger.error(f"Failed to open URL {url}: {e}")
 
 
 def open_webui(root_url: str) -> None:
     """Open the web dashboard."""
-    open_url(root_url)
+    p1 = multiprocessing.Process(target=open_url, args=(root_url,))
+    p1.start()
+    p1.join()
 
 
 def open_dir(d: str) -> None:
@@ -91,10 +94,6 @@ class TrayIcon(QSystemTrayIcon):
         self.status_timer.timeout.connect(self.check_user_status)
         self.status_timer.start(60000)  # Every 60 seconds by default
 
-        self.status_check_timer = QTimer(self)
-        self.status_check_timer.timeout.connect(self.check_credentials_status)
-        self.status_check_timer.stop()  # Initially stopped
-
         # Create background threads for login/signout
         self.sign_out_thread = None
         self.login_thread = None
@@ -106,6 +105,7 @@ class TrayIcon(QSystemTrayIcon):
         # Fetch the cached credentials safely
         self.credentials = cached_credentials()
 
+        # Check if credentials are None or invalid
         if self.credentials:
             # If credentials are valid, we can proceed to build the menu based on the logged-in user
             user_data = self.credentials.json() if hasattr(self.credentials, 'json') else self.credentials
@@ -141,12 +141,12 @@ class TrayIcon(QSystemTrayIcon):
                 menu.addAction(signout_action)
             else:
                 # If userId is missing or invalid, we show the Login option
-                login_action = QAction("Sign in", self)
+                login_action = QAction("Login", self)
                 login_action.triggered.connect(self.sign_in)
                 menu.addAction(login_action)
         else:
             # If no credentials are found, show the Login option
-            login_action = QAction("Sign in", self)
+            login_action = QAction("Login", self)
             login_action.triggered.connect(self.sign_in)
             menu.addAction(login_action)
 
@@ -217,9 +217,6 @@ class TrayIcon(QSystemTrayIcon):
     def on_sign_out_finished(self):
         """Called when sign out is complete."""
         self.update_menu()  # Rebuild menu after signout
-
-        # Explicitly update the context menu to reflect changes immediately
-        self.setContextMenu(self._parent)  # Force the menu to refresh
         logger.info("Sign-out complete.")
 
     def sign_in(self):
@@ -229,15 +226,9 @@ class TrayIcon(QSystemTrayIcon):
             self.login_thread.finished.connect(self.on_login_finished)
             self.login_thread.start()
 
-        # Start checking credentials every 2 seconds once login is initiated
-        self.status_check_timer.start(2000)  # Check every 2 seconds after login
-
     def on_login_finished(self):
         """Handle login UI updates once login is complete."""
         self.update_menu()  # Rebuild the menu after successful login
-
-        # Explicitly update the context menu to reflect changes immediately
-        self.setContextMenu(self._parent)  # Force the menu to refresh
         logger.info("Login complete.")
 
     def on_activated(self, reason: QSystemTrayIcon.ActivationReason):
@@ -269,19 +260,21 @@ def run() -> int:
     # Add search paths for icon resources
     QDir.addSearchPath("icons", str(scriptdir.parent / "media/logo/"))
     QDir.addSearchPath("icons", str(scriptdir.parent.parent / "Resources/sd_qt/media/logo/"))
-
+    print(f"search paths: {QDir.searchPaths('icons')}")
     # Set up the tray icon
     icon_path = "icons:black-monochrome-logo.png" if sys.platform == "darwin" else "icons:logo.png"
+
     icon = QIcon(icon_path)
 
     if icon.isNull():
-        logger.error("Failed to load tray icon.")
+        logger.error(f"Failed to load tray icon from path: {icon_path}")
         return -1
 
     # Create the tray icon
     tray_icon = TrayIcon(icon)
 
     tray_icon.show()
+
     QApplication.setQuitOnLastWindowClosed(False)
     return app.exec()
 
