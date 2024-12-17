@@ -11,14 +11,6 @@ import sys
 
 
 extra_pathex = []
-if platform.system() == "Windows":
-	# The Windows version includes paths to Qt binaries which are
-	# not automatically found due to bug in PyInstaller 3.2.
-	# See: https://github.com/pyinstaller/pyinstaller/issues/2152
-	import PySide6
-	pyqt_path = os.path.dirname(PySide6.__file__)
-	extra_pathex.append(pyqt_path + "\\Qt\\bin")
-
 
 icon = 'media/logo/logo.ico'
 block_cipher = None
@@ -27,7 +19,7 @@ block_cipher = None
 a = Analysis(['sd_qt/__main__.py'],
              pathex=[] + extra_pathex,
              binaries=None,
-             datas=[('resources/sd-qt.desktop', '.'), ('media', 'media')],
+             datas=[('resources/sd-qt.desktop', '.'), ('media', 'media'),("sd_qt/sd_desktop/resources",'sd_desktop/resources')],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
