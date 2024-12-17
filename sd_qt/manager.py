@@ -544,19 +544,12 @@ class Manager:
             logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
     def stop_all(self) -> None:
-        for module in filter(lambda m: m.is_alive(), self.modules):
-            module.stop()
-
-    def stop_all_watchers(self) -> None:
         """
          Stop all servers and their modules. This is useful for tests that want to clean up after a server has been stopped.
-
-
+         
+         
          @return None on success None on failure ( no exception raised
         """
-
-        # Find 'sd-server' module and temporarily exclude it from the stop process
-        # This method will stop the server module if it is alive.
         server_module_name = "sd-server"
         server_module = None
 
@@ -568,6 +561,11 @@ class Manager:
                 server_module = module
             elif module.is_alive():
                 module.stop()
+
+        # Finally, stop 'sd-server' if it's running
+        # Stop the server module if it is alive.
+        if server_module and server_module.is_alive():
+            server_module.stop()
 
     def print_status(self, module_name: Optional[str] = None) -> None:
         """
@@ -645,7 +643,6 @@ class Manager:
                 return status
             else:
                 logger.error(f"Module {module_name} not found")
-                return {"is_alive": False}
 
     def stop_modules(self, module_name: str) -> str:
         """
