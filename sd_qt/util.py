@@ -70,5 +70,16 @@ def launchon_start(status):
     data = json.dumps({"status": status})
     settings = requests.post(host + "/0/launchOnStart", data=data, headers=headers)
 
+def threshold_save(data):
+    print("IN UTIL")
+    creds = credentials()
+    if creds:
+        sundail_token = creds["token"] if creds['token'] else None
+    headers = {'Content-Type': 'application/json', 'Accept': 'application/json',"Authorization": sundail_token}
+    data = json.dumps({"threshold": data})
+    settings = requests.post(host + "/0/threshold", data=data, headers=headers)
+    # import pdb; pdb.set_trace()
+
+
 def signout():
     settings = requests.get(host + "/0/signout")

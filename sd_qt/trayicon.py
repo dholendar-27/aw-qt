@@ -4,11 +4,11 @@ import subprocess
 import webbrowser
 import os
 from pathlib import Path
-from PySide6.QtCore import QTimer, QDir, Qt, QCoreApplication, QThread, Signal, QObject, QEvent
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget
+from PySide6.QtCore import QTimer, QDir, Qt, QCoreApplication, QThread, Signal, QObject, QEvent, QTime
+from PySide6.QtWidgets import QApplication, QSystemTrayIcon, QMenu, QWidget, QWidgetAction, QHBoxLayout, QTimeEdit, QPushButton
 from PySide6.QtGui import QIcon,QAction
 from .util import retrieve_settings, add_settings, user_status, idletime_settings, launchon_start, signout, \
-    cached_credentials
+    cached_credentials, threshold_save
 from .manager import Manager
 
 logger = logging.getLogger(__name__)
@@ -101,6 +101,26 @@ class TrayIcon(QSystemTrayIcon):
 
         # Fetch the cached credentials safely
         self.credentials = cached_credentials()
+
+        # Time Box and Save Button
+        time_widget_action = QWidgetAction(menu)
+        time_widget = QWidget()
+        time_layout = QHBoxLayout()
+
+        # Time Input Box
+        time_input = QTimeEdit()
+        time_input.setDisplayFormat("HH:mm:ss")  # Format to include hours, minutes, and seconds
+        time_input.setTime(QTime(0, 0, 0))  # Default time set to 00:00:00
+        time_layout.addWidget(time_input)
+
+        # Save Button
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(lambda: self.save_threshold(time_input.time()))
+        time_layout.addWidget(save_button)
+
+        time_widget.setLayout(time_layout)
+        time_widget_action.setDefaultWidget(time_widget)
+        menu.addAction(time_widget_action)
 
         # Check if credentials are None or invalid
         if self.credentials:
@@ -215,6 +235,20 @@ class TrayIcon(QSystemTrayIcon):
             self.update_menu()
         elif reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             open_webui(self.root_url)
+
+    def save_threshold(self, time_value: QTime):
+        """Save the user-input threshold time."""
+        try:
+            hours = time_value.hour()
+            minutes = time_value.minute()
+            seconds = time_value.second()
+
+            # Convert time to total seconds
+            total_seconds = hours * 3600 + minutes * 60 + seconds
+            threshold_save(total_seconds)  # Call the method with the input time in seconds
+            logger.info(f"Threshold time saved: {total_seconds} seconds")
+        except Exception as e:
+            logger.error(f"Failed to save threshold time: {e}")
 
     def quit_application(self):
         """Quit the application."""
