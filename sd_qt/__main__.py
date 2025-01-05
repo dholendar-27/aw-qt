@@ -3,7 +3,7 @@ import sys
 import tempfile
 import ctypes
 from sd_qt.main import main
-
+from sd_qt.delete_folder import handle_first_run
 
 def show_error_message():
     ctypes.windll.user32.MessageBoxW(
@@ -25,5 +25,8 @@ except WindowsError as e:
 
 with open(lockfile, 'wb') as lockfileobj:
     # run your app's main here
+    package_name = "Sundial"  # You can change this to any package name
+    reset_on_reinstall = True  # Set to True to reset on reinstall
+    handle_first_run(package_name, reset_on_reinstall)
     main()
 os.unlink(lockfile)
