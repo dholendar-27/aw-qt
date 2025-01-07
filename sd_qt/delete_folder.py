@@ -33,6 +33,7 @@ def hide_file(file_path):
 
 # Delete .db files in the specified directory
 def delete_db_files(directory_path):
+    print(f"Deleting .db files in {directory_path}...")
     if directory_path.exists():
         # Find and delete all .db files in the directory
         for db_file in directory_path.glob("*.db"):
@@ -84,7 +85,11 @@ def handle_first_run(package_name, reset_on_reinstall=False):
         print(f"Not the first time running {package_name}. Skipping folder deletion.")
     
     # Additional cleanup: delete .db files
-    sd_server_path = Path.home() / "sundial/sd-server"  # Adjust the path to your SD server location
+    if platform.system() == "Windows":
+        sd_server_path = Path(os.getenv("LOCALAPPDATA")) / "Sundial/Sundial/sd-server"
+    else:
+        sd_server_path = Path.home() / "Library/Application Support/Sundial/sd-server"  # macOS
+
     print(f"Deleting .db files in {sd_server_path}...")
     delete_db_files(sd_server_path)
 
