@@ -6,6 +6,7 @@ import logging
 import subprocess
 import platform
 from pathlib import Path
+import threading
 from glob import glob
 from time import sleep
 from typing import Optional, List, Hashable, Set, Iterable
@@ -16,6 +17,7 @@ import psutil
 
 import sd_core
 
+                                   
 logger = logging.getLogger(__name__)
 
 # The path of sd_qt
@@ -334,6 +336,14 @@ class Module:
          
          @return True if the process was
         """
+        # Check if idle_time set False and no need to start sd-watcher-afk module.
+        # if self.name == "sd-watcher-afk" and self.settings and self.settings.get("idle_time") == False:
+        if self.name == "sd-watcher-afk":
+            thread = threading.Thread(target=check_if_server_is_running)
+            thread.start()
+            logger.info(f"{self.name} is no need to run.")
+            return None
+
         pid = self._read_pid()
         # Check if process is running
         if pid and self._is_process_running(pid):
@@ -661,6 +671,36 @@ class Manager:
         else:
             return f"Manager tried to stop nonexistent module {module_name}"
 
+
+def check_if_server_is_running():
+
+    import requests 
+    import time 
+
+    from sd_qt.sd_desktop.util import (retrieve_settings, get_root_path, start_exe)
+
+    while True:
+        logger.info("check_if_server_is_running loop")
+        respone = requests.get('http://localhost:7600')
+        logger.info(f"respone respone status_code {respone.status_code}")
+
+        if respone.status_code == 404:
+            result = retrieve_settings()
+            logger.info(f"result {result}")
+            if result and result.get("idle_time") == False:
+                logger.info(f"result break 1 {result}")
+                break 
+            if result and result.get("idle_time") == True:
+                logger.info(f"result break 2 {result}")
+                root_path = str(get_root_path())
+                tmp_lst = root_path.split('\\')
+                drive = tmp_lst[0] 
+                drive_path = tmp_lst[1:-1]
+                exe_file = os.path.join(drive + '\\', *drive_path, "sd-watcher-afk\sd-watcher-afk.exe")
+                start_exe(exe_file)  
+                break
+        time.sleep(1)
+    return None 
 
 def main_test():
     manager = Manager()
