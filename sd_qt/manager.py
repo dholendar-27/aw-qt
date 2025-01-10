@@ -1,20 +1,17 @@
 import configparser
 import os
-import signal
 import sys
 import logging
 import subprocess
 import platform
 from pathlib import Path
-import threading
 from glob import glob
 from time import sleep
-from typing import Optional, List, Hashable, Set, Iterable
+from typing import Optional, List, Set, Iterable
 
-from sd_core import db_cache
-from sd_core.dirs import get_data_dir
 import psutil
 
+from sd_core.dirs import get_data_dir
 import sd_core
 
                                    
@@ -263,7 +260,7 @@ class Module:
         self.type = type
         self.config_file_path = config_file_path
         self.started = False
-        initialize_ini_file()
+        initialize_ini_file()        
 
     def _read_pid(self) -> Optional[int]:
         """
@@ -339,16 +336,15 @@ class Module:
         # Check if idle_time set False and no need to start sd-watcher-afk module.
         # if self.name == "sd-watcher-afk" and self.settings and self.settings.get("idle_time") == False:
         if self.name == "sd-watcher-afk":
-            thread = threading.Thread(target=check_if_server_is_running)
-            thread.start()
             logger.info(f"{self.name} is no need to run.")
             return None
 
         pid = self._read_pid()
         # Check if process is running
-        if pid and self._is_process_running(pid):
+        if pid and self._is_process_running(pid) and self.is_process_name_equal(pid):
             logger.info(f"{self.name} is already running")
             return
+        
         exec_cmd = [str(self.path)]
         self.started = True
         logger.info(f"Starting {self.name}")
@@ -435,7 +431,18 @@ class Module:
                 return f.read()
         else:
             return "No log file found"
-
+        
+    def is_process_name_equal(self, pid: int) -> bool:    
+        try:
+            process = psutil.Process(pid)
+            result = process.as_dict(attrs=['pid', 'name'])
+            tmp_name = self.name + ".exe"
+            if tmp_name == result.get('name'):
+                return True 
+            return False
+        except Exception as e:
+            logger.info("Error in getting process id.")
+            return False 
 
 class Manager:
     def __init__(self, testing: bool = False) -> None:
@@ -670,37 +677,6 @@ class Manager:
                 return f"Module {module_name} is stopped"
         else:
             return f"Manager tried to stop nonexistent module {module_name}"
-
-
-def check_if_server_is_running():
-
-    import requests 
-    import time 
-
-    from sd_qt.sd_desktop.util import (retrieve_settings, get_root_path, start_exe)
-
-    while True:
-        logger.info("check_if_server_is_running loop")
-        respone = requests.get('http://localhost:7600')
-        logger.info(f"respone respone status_code {respone.status_code}")
-
-        if respone.status_code == 404:
-            result = retrieve_settings()
-            logger.info(f"result {result}")
-            if result and result.get("idle_time") == False:
-                logger.info(f"result break 1 {result}")
-                break 
-            if result and result.get("idle_time") == True:
-                logger.info(f"result break 2 {result}")
-                root_path = str(get_root_path())
-                tmp_lst = root_path.split('\\')
-                drive = tmp_lst[0] 
-                drive_path = tmp_lst[1:-1]
-                exe_file = os.path.join(drive + '\\', *drive_path, "sd-watcher-afk\sd-watcher-afk.exe")
-                start_exe(exe_file)  
-                break
-        time.sleep(1)
-    return None 
 
 def main_test():
     manager = Manager()
