@@ -1,6 +1,5 @@
 import configparser
 import os
-import signal
 import sys
 import logging
 import subprocess
@@ -8,14 +7,14 @@ import platform
 from pathlib import Path
 from glob import glob
 from time import sleep
-from typing import Optional, List, Hashable, Set, Iterable
+from typing import Optional, List, Set, Iterable
 
-from sd_core import db_cache
-from sd_core.dirs import get_data_dir
 import psutil
 
+from sd_core.dirs import get_data_dir
 import sd_core
 
+                                   
 logger = logging.getLogger(__name__)
 
 # The path of sd_qt
@@ -261,7 +260,7 @@ class Module:
         self.type = type
         self.config_file_path = config_file_path
         self.started = False
-        initialize_ini_file()
+        initialize_ini_file()        
 
     def _read_pid(self) -> Optional[int]:
         """
@@ -334,11 +333,18 @@ class Module:
          
          @return True if the process was
         """
+        # Check if idle_time set False and no need to start sd-watcher-afk module.
+        # if self.name == "sd-watcher-afk" and self.settings and self.settings.get("idle_time") == False:
+        if self.name == "sd-watcher-afk":
+            logger.info(f"{self.name} is no need to run.")
+            return None
+
         pid = self._read_pid()
         # Check if process is running
-        if pid and self._is_process_running(pid):
+        if pid and self._is_process_running(pid) and self.is_process_name_equal(pid):
             logger.info(f"{self.name} is already running")
             return
+        
         exec_cmd = [str(self.path)]
         self.started = True
         logger.info(f"Starting {self.name}")
@@ -425,7 +431,18 @@ class Module:
                 return f.read()
         else:
             return "No log file found"
-
+        
+    def is_process_name_equal(self, pid: int) -> bool:    
+        try:
+            process = psutil.Process(pid)
+            result = process.as_dict(attrs=['pid', 'name'])
+            tmp_name = self.name + ".exe"
+            if tmp_name == result.get('name'):
+                return True 
+            return False
+        except Exception as e:
+            logger.info("Error in getting process id.")
+            return False 
 
 class Manager:
     def __init__(self, testing: bool = False) -> None:
@@ -544,19 +561,12 @@ class Manager:
             logger.error(f"Manager tried to stop nonexistent module {module_name}")
 
     def stop_all(self) -> None:
-        for module in filter(lambda m: m.is_alive(), self.modules):
-            module.stop()
-
-    def stop_all_watchers(self) -> None:
         """
          Stop all servers and their modules. This is useful for tests that want to clean up after a server has been stopped.
-
-
+         
+         
          @return None on success None on failure ( no exception raised
         """
-
-        # Find 'sd-server' module and temporarily exclude it from the stop process
-        # This method will stop the server module if it is alive.
         server_module_name = "sd-server"
         server_module = None
 
@@ -568,6 +578,11 @@ class Manager:
                 server_module = module
             elif module.is_alive():
                 module.stop()
+
+        # Finally, stop 'sd-server' if it's running
+        # Stop the server module if it is alive.
+        if server_module and server_module.is_alive():
+            server_module.stop()
 
     def print_status(self, module_name: Optional[str] = None) -> None:
         """
@@ -645,7 +660,6 @@ class Manager:
                 return status
             else:
                 logger.error(f"Module {module_name} not found")
-                return {"is_alive": False}
 
     def stop_modules(self, module_name: str) -> str:
         """
@@ -663,7 +677,6 @@ class Manager:
                 return f"Module {module_name} is stopped"
         else:
             return f"Manager tried to stop nonexistent module {module_name}"
-
 
 def main_test():
     manager = Manager()
