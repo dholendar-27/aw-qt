@@ -19,7 +19,9 @@ block_cipher = None
 a = Analysis(['sd_qt/__main__.py'],
              pathex=[] + extra_pathex,
              binaries=None,
-             datas=[('resources/sd-qt.desktop', '.'), ('media', 'media'),("sd_qt/sd_desktop/resources",'sd_desktop/resources')],
+             datas=[('resources/sd-qt.desktop', '.'), ('media', 'media'),("sd_qt/sd_desktop/resources",'sd_desktop/resources'),
+             ("sd_qt/sd_desktop/locales",'sd_desktop/locales')
+             ],
              hiddenimports=[],
              hookspath=[],
              runtime_hooks=[],
