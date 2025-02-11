@@ -13,7 +13,7 @@ from sd_core.log import setup_logging
 
 from .manager import Manager
 from .config import AwQtSettings
-from .sd_desktop.sundial import run_application
+from .sd_desktop.main import run_application
 
 logger = logging.getLogger(__name__)
 
